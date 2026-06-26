@@ -1,0 +1,6 @@
+{
+  "InstallSteam": true,
+  "InstallEpic": true,
+  "InstallBattleNet": true,
+  "InstallGOGGalaxy": false
+}

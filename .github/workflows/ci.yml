@@ -1,0 +1,64 @@
+name: CI
+
+on:
+  push:
+    branches: [main, develop, "feature/**", "bugfix/**", "docs/**"]
+  pull_request:
+    branches: [main, develop]
+
+jobs:
+  powershell-lint:
+    name: PowerShell Syntax & PSScriptAnalyzer
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run PSScriptAnalyzer
+        shell: pwsh
+        run: |
+          Install-Module -Name PSScriptAnalyzer -Force -Scope CurrentUser
+          $results = Invoke-ScriptAnalyzer -Path . -Recurse -Severity Error,Warning
+          $results | Format-Table -AutoSize
+          if ($results | Where-Object Severity -eq 'Error') {
+            throw "PSScriptAnalyzer found errors."
+          }
+
+  json-validation:
+    name: Validate JSON Configuration
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate JSON files
+        run: |
+          status=0
+          for f in $(find . -name "*.json" -not -path "./node_modules/*"); do
+            if ! python3 -m json.tool "$f" > /dev/null; then
+              echo "Invalid JSON: $f"
+              status=1
+            fi
+          done
+          exit $status
+
+  markdown-validation:
+    name: Validate Markdown Links
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Lint Markdown links
+        uses: gaurav-nelson/github-action-markdown-link-check@v1
+        with:
+          use-quiet-mode: 'yes'
+          config-file: '.github/workflows/mlc_config.json'
+
+  bootstrap-integrity:
+    name: Bootstrap Integrity
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Parse Bootstrap.ps1
+        shell: pwsh
+        run: |
+          $null = [System.Management.Automation.Language.Parser]::ParseFile("$PWD\Bootstrap.ps1", [ref]$null, [ref]$errors)
+          if ($errors.Count -gt 0) {
+            $errors | ForEach-Object { Write-Error $_ }
+            throw "Bootstrap.ps1 failed to parse."
+          }
