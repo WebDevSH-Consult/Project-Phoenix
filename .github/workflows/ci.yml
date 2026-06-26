@@ -64,3 +64,19 @@ jobs:
             $errors | ForEach-Object { Write-Error $_ }
             throw "Bootstrap.ps1 failed to parse."
           }
+
+  module-tests:
+    name: Module Tests (Pester)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run Pester tests
+        shell: pwsh
+        run: |
+          Install-Module -Name Pester -MinimumVersion 5.5.0 -Force -Scope CurrentUser -SkipPublisherCheck
+          Import-Module Pester -MinimumVersion 5.5.0
+          $config = New-PesterConfiguration
+          $config.Run.Path = 'tests'
+          $config.Run.Exit = $true
+          $config.Output.Verbosity = 'Detailed'
+          Invoke-Pester -Configuration $config
