@@ -1,46 +1,42 @@
 # Branch Protection Settings
 
-Apply these via GitHub web UI: **Settings → Branches → Add branch protection rule**. (No `gh` CLI / GitHub connector available in this session to apply them automatically — do this manually once.)
+Applied as GitHub repository **rulesets** (`Settings → Rules → Rulesets`), via `gh api`. Classic branch protection and rulesets both require GitHub Pro on a private repo — the repo was made public on 2026-06-26 to unlock this on the free plan.
 
-## Rule 1 — `main`
+## Rule 1 — `main` (ruleset `main-protection`, id 18157754)
 
-Branch name pattern: `main`
+- Pull request required before merging
+  - Approvals required: **0** — see note below on self-approval
+  - Dismiss stale approvals on new commits: **on**
+  - Required conversation resolution: **on**
+- Required status checks (must be up to date with base branch):
+  - `PowerShell Syntax & PSScriptAnalyzer`
+  - `Validate JSON Configuration`
+  - `Validate Markdown Links`
+  - `Bootstrap Integrity`
+- Linear history required
+- No force pushes, no branch deletion
+- No bypass actors — rules apply to everyone, including the repo owner
 
-- [x] Require a pull request before merging
-  - [x] Require approvals — **1**
-  - [x] Dismiss stale pull request approvals when new commits are pushed
-  - [ ] Require review from Code Owners (optional — enable once CODEOWNERS coverage is broader than one person)
-- [x] Require status checks to pass before merging
-  - [x] Require branches to be up to date before merging
-  - Required checks (once CI has run at least once on a PR, these become selectable):
-    - `PowerShell Syntax & PSScriptAnalyzer`
-    - `Validate JSON Configuration`
-    - `Validate Markdown Links`
-    - `Bootstrap Integrity`
-- [x] Require conversation resolution before merging
-- [x] Require linear history
-- [x] Do not allow bypassing the above settings (applies rules to admins too)
-- [ ] Allow force pushes — leave **unchecked**
-- [ ] Allow deletions — leave **unchecked**
+## Rule 2 — `develop` (ruleset `develop-protection`, id 18157755)
 
-## Rule 2 — `develop`
+Same as `main`, except linear history is **not** required (merge commits allowed).
 
-Branch name pattern: `develop`
+## Why required approvals = 0
 
-- [x] Require a pull request before merging
-  - [x] Require approvals — **1**
-  - [x] Dismiss stale pull request approvals when new commits are pushed
-- [x] Require status checks to pass before merging
-  - [x] Require branches to be up to date before merging
-  - Same required checks as `main`
-- [x] Require conversation resolution before merging
-- [ ] Require linear history — optional, enable if you want to disallow merge commits and force squash/rebase
-- [ ] Allow force pushes — leave **unchecked**
-- [ ] Allow deletions — leave **unchecked**
+GitHub blocks self-approval at the platform level — the "Approve" option is disabled in the UI and the API rejects it (`Can not approve your own pull request`) for the PR author, regardless of branch protection config. On a solo-maintainer repo this makes "require 1 approval" permanently unsatisfiable. We dropped it to 0 and rely on actually reading the diff before merging, rather than a rubber-stamp gate. If a second collaborator joins the project, raise `required_approving_review_count` back to 1.
 
-## Notes
+## Repository settings
 
-- `feature/*`, `bugfix/*`, `docs/*`, `experiment/*` branches are intentionally **not** protected — they're disposable working branches.
-- Until the first CI run completes on a PR, the "Required checks" list in GitHub's UI will be empty (it only lists checks that have run at least once). Open the foundation PR first, let CI run, then come back and tick the four checks above.
-- Repository setting **Settings → General → Pull Requests**: enable "Automatically delete head branches" so merged `feature/*` branches don't pile up.
-- Repository setting **Settings → General**: set default branch to `develop` so new clones/PRs target it instead of `main`.
+- Default branch: `develop`
+- Delete branch on merge: enabled
+- Visibility: public
+- `feature/*`, `bugfix/*`, `docs/*`, `experiment/*` branches are intentionally **not** protected — disposable working branches.
+
+## Re-applying or editing these rules
+
+```powershell
+gh api -X PUT repos/WebDevSH-Consult/Project-Phoenix/rulesets/18157754 --input ruleset_main.json
+gh api -X PUT repos/WebDevSH-Consult/Project-Phoenix/rulesets/18157755 --input ruleset_develop.json
+```
+
+(JSON bodies mirror the rules listed above — see ruleset definitions in PR history or regenerate from this doc.)
