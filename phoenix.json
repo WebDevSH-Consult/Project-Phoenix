@@ -1,0 +1,16 @@
+{
+  "$schema": "./docs/standards/phoenix.schema.json",
+  "version": "0.1.0",
+  "name": "Project Phoenix",
+  "modules": {
+    "windows": "configs/windows.json",
+    "applications": "configs/applications.json",
+    "gaming": "configs/gaming.json",
+    "ai": "configs/ai.json",
+    "powershell": "configs/powershell.json"
+  },
+  "logging": {
+    "path": "logs/",
+    "level": "INFO"
+  }
+}

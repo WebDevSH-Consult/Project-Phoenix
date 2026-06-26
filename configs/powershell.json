@@ -1,0 +1,4 @@
+{
+  "InstallPwshCore": true,
+  "DefaultProfile": "templates/profile.ps1"
+}

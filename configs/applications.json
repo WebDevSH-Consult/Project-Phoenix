@@ -1,0 +1,7 @@
+{
+  "InstallGit": true,
+  "InstallPython": true,
+  "InstallNode": true,
+  "InstallDocker": false,
+  "InstallVSCode": true
+}
