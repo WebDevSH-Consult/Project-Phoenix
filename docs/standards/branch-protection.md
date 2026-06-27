@@ -13,6 +13,7 @@ Applied as GitHub repository **rulesets** (`Settings → Rules → Rulesets`), v
   - `Validate JSON Configuration`
   - `Validate Markdown Links`
   - `Bootstrap Integrity`
+  - `Module Tests (Pester)` (added once the Pester suite landed in v0.2.0)
 - Linear history required
 - No force pushes, no branch deletion
 - No bypass actors — rules apply to everyone, including the repo owner
