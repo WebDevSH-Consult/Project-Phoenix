@@ -7,7 +7,7 @@
 
 Project Phoenix is not a script. It is a platform: a modular, version-controlled, self-validating system for building, configuring, and maintaining a Windows workstation as Infrastructure-as-Code.
 
-See [MANIFESTO.md](./MANIFESTO.md) for the philosophy, [ARCHITECTURE.md](./ARCHITECTURE.md) for system design, and [ROADMAP.md](./ROADMAP.md) for where this is headed.
+See [VISION.md](./VISION.md) for the long-term direction, [MANIFESTO.md](./MANIFESTO.md) for the philosophy, [ARCHITECTURE.md](./ARCHITECTURE.md) for system design, and [ROADMAP.md](./ROADMAP.md) for where this is headed.
 
 ---
 
