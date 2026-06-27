@@ -11,21 +11,32 @@
 [CmdletBinding()]
 param()
 
+Set-StrictMode -Version Latest
+$ErrorActionPreference = 'Stop'
+
 $root = $PSScriptRoot
+$transcriptPath = Join-Path $root "logs/transcript-$(Get-Date -Format 'yyyyMMdd-HHmmss').log"
+New-Item -ItemType Directory -Path (Join-Path $root 'logs') -Force | Out-Null
+Start-Transcript -Path $transcriptPath -Force | Out-Null
 
-Import-Module (Join-Path $root 'modules/PhoenixLogging/PhoenixLogging.psd1') -Force
-Import-Module (Join-Path $root 'modules/PhoenixCore/PhoenixCore.psd1') -Force
-Import-Module (Join-Path $root 'modules/Example/Example.psd1') -Force
+try {
+    Import-Module (Join-Path $root 'modules/PhoenixLogging/PhoenixLogging.psd1') -Force
+    Import-Module (Join-Path $root 'modules/PhoenixCore/PhoenixCore.psd1') -Force
+    Import-Module (Join-Path $root 'modules/Example/Example.psd1') -Force
 
-Initialize-PhoenixLog -LogDirectory (Join-Path $root 'logs')
+    Initialize-PhoenixLog -LogDirectory (Join-Path $root 'logs')
 
-$config = Get-Content (Join-Path $root 'phoenix.json') -Raw | ConvertFrom-Json
-Write-PhoenixLog -Level INFO -Message "Project Phoenix v$($config.version) starting..."
+    $config = Get-Content (Join-Path $root 'phoenix.json') -Raw | ConvertFrom-Json
+    Write-PhoenixLog -Level INFO -Message "Project Phoenix v$($config.version) starting..."
 
-$modules = @(
-    Get-ExampleModuleDefinition
-)
+    $modules = @(
+        Get-ExampleModuleDefinition
+    )
 
-$null = Invoke-PhoenixBootstrap -Modules $modules
+    $null = Invoke-PhoenixBootstrap -Modules $modules
 
-Write-PhoenixLog -Level SUCCESS -Message 'Bootstrap complete.'
+    Write-PhoenixLog -Level SUCCESS -Message 'Bootstrap complete.'
+}
+finally {
+    Stop-Transcript | Out-Null
+}
