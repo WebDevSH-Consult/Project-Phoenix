@@ -5,7 +5,7 @@
     Author            = 'Project Phoenix'
     Description       = 'Module lifecycle dispatcher all Phoenix modules run through. Requires PhoenixLogging to be imported first.'
     PowerShellVersion = '7.0'
-    FunctionsToExport = @('Invoke-PhoenixModuleLifecycle', 'Invoke-PhoenixBootstrap')
+    FunctionsToExport = @('Get-PhoenixVersion', 'Invoke-PhoenixModuleLifecycle', 'Invoke-PhoenixBootstrap')
     CmdletsToExport   = @()
     VariablesToExport = @()
     AliasesToExport   = @()
