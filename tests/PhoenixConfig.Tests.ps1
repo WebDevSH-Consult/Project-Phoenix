@@ -1,27 +1,27 @@
-BeforeAll {
-    Import-Module "$PSScriptRoot/../modules/PhoenixLogging/PhoenixLogging.psd1" -Force
-    Import-Module "$PSScriptRoot/../modules/PhoenixConfig/PhoenixConfig.psd1" -Force
-    Initialize-PhoenixLog -LogDirectory (Join-Path $TestDrive 'logs')
-}
+Describe 'Get-PhoenixConfiguration' {
+    BeforeAll {
+        Import-Module "$PSScriptRoot/../modules/PhoenixLogging/PhoenixLogging.psd1" -Force
+        Import-Module "$PSScriptRoot/../modules/PhoenixConfig/PhoenixConfig.psd1" -Force
+        Initialize-PhoenixLog -LogDirectory (Join-Path $TestDrive 'logs')
 
-function New-FixtureRoot {
-    param([hashtable]$RootContent, [hashtable]$DomainFiles = @{})
+        function New-FixtureRoot {
+            param([hashtable]$RootContent, [hashtable]$DomainFiles = @{})
 
-    $fixtureRoot = Join-Path $TestDrive ([guid]::NewGuid())
-    New-Item -ItemType Directory -Path $fixtureRoot -Force | Out-Null
-    New-Item -ItemType Directory -Path (Join-Path $fixtureRoot 'configs') -Force | Out-Null
+            $fixtureRoot = Join-Path $TestDrive ([guid]::NewGuid())
+            New-Item -ItemType Directory -Path $fixtureRoot -Force | Out-Null
+            New-Item -ItemType Directory -Path (Join-Path $fixtureRoot 'configs') -Force | Out-Null
 
-    $RootContent | ConvertTo-Json -Depth 5 | Set-Content -Path (Join-Path $fixtureRoot 'phoenix.json')
+            $RootContent | ConvertTo-Json -Depth 5 | Set-Content -Path (Join-Path $fixtureRoot 'phoenix.json')
 
-    foreach ($entry in $DomainFiles.GetEnumerator()) {
-        $path = Join-Path $fixtureRoot $entry.Key
-        Set-Content -Path $path -Value $entry.Value
+            foreach ($entry in $DomainFiles.GetEnumerator()) {
+                $path = Join-Path $fixtureRoot $entry.Key
+                Set-Content -Path $path -Value $entry.Value
+            }
+
+            return $fixtureRoot
+        }
     }
 
-    return $fixtureRoot
-}
-
-Describe 'Get-PhoenixConfiguration' {
     It 'returns a merged object with root fields and every domain config attached' {
         $root = New-FixtureRoot -RootContent @{
             version = '9.9.9'
