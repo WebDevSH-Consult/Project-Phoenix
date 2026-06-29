@@ -22,11 +22,12 @@ Start-Transcript -Path $transcriptPath -Force | Out-Null
 try {
     Import-Module (Join-Path $root 'modules/PhoenixLogging/PhoenixLogging.psd1') -Force
     Import-Module (Join-Path $root 'modules/PhoenixCore/PhoenixCore.psd1') -Force
+    Import-Module (Join-Path $root 'modules/PhoenixConfig/PhoenixConfig.psd1') -Force
     Import-Module (Join-Path $root 'modules/Example/Example.psd1') -Force
 
     Initialize-PhoenixLog -LogDirectory (Join-Path $root 'logs')
 
-    $config = Get-Content (Join-Path $root 'phoenix.json') -Raw | ConvertFrom-Json
+    $config = Get-PhoenixConfiguration -RootPath $root
     Write-PhoenixLog -Level INFO -Message "Project Phoenix v$($config.version) starting..."
 
     $modules = @(
