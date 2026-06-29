@@ -8,6 +8,7 @@ All notable changes to this project are documented in this file. Format follows 
 - `modules/PhoenixConfig`: configuration engine (`Get-PhoenixConfiguration`) that loads `phoenix.json` and every per-domain config file it references (`configs/windows.json`, `applications.json`, `gaming.json`, `ai.json`, `powershell.json`) into a single merged object. Missing or malformed config files fail cleanly with a logged `ERROR` entry rather than a raw exception.
 - `Bootstrap.ps1` now loads configuration through `Get-PhoenixConfiguration` instead of parsing `phoenix.json` directly.
 - Pester tests covering successful merge, missing files, and malformed JSON for both the root and per-domain config files.
+- `modules/PhoenixCore`: `Get-PhoenixVersion` reads the `VERSION` file and returns `Version`/`Major`/`Minor`/`Patch`. `Bootstrap.ps1` logs it at startup and exposes a `-Version` switch that prints it and exits without running any modules. Closes [#13](https://github.com/WebDevSH-Consult/Project-Phoenix/issues/13).
 
 ## [0.2.0] - Phoenix Core
 
