@@ -47,3 +47,25 @@ Describe 'Invoke-PhoenixBootstrap' {
         $results.Module | Should -Contain 'B'
     }
 }
+
+Describe 'Get-PhoenixVersion' {
+    It 'parses the VERSION file into Version/Major/Minor/Patch' {
+        $root = Join-Path $TestDrive ([guid]::NewGuid())
+        New-Item -ItemType Directory -Path $root -Force | Out-Null
+        Set-Content -Path (Join-Path $root 'VERSION') -Value '1.2.3'
+
+        $version = Get-PhoenixVersion -RootPath $root
+
+        $version.Version | Should -Be '1.2.3'
+        $version.Major | Should -Be 1
+        $version.Minor | Should -Be 2
+        $version.Patch | Should -Be 3
+    }
+
+    It 'throws a clean error when VERSION is missing' {
+        $root = Join-Path $TestDrive ([guid]::NewGuid())
+        New-Item -ItemType Directory -Path $root -Force | Out-Null
+
+        { Get-PhoenixVersion -RootPath $root } | Should -Throw '*VERSION*'
+    }
+}
