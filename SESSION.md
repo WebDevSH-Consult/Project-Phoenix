@@ -7,12 +7,13 @@ Post-Foundation — Phoenix Core build-out (Roadmap 0.1–0.4 complete, working 
 - PHX-001 Repository Foundation (v0.1.0)
 - Phoenix Core + Logging Engine (v0.2.0): `modules/PhoenixCore`, `modules/PhoenixLogging`, working `Bootstrap.ps1`, Pester suite, CI gating
 - Roadmap 0.4 Configuration Engine: `modules/PhoenixConfig` (`Get-PhoenixConfiguration`), wired into `Bootstrap.ps1`
+- PHX-002 Version Reporting (issue [#13](https://github.com/WebDevSH-Consult/Project-Phoenix/issues/13), closed): `Get-PhoenixVersion` in `modules/PhoenixCore`, `Bootstrap.ps1` logs version at startup and gained a `-Version` switch
 
 ## Current Task
 - None in progress — awaiting next task selection
 
 ## Next Planned Task
-- Candidates: [issue #13](https://github.com/WebDevSH-Consult/Project-Phoenix/issues/13) (small — explicit version reporting) or Roadmap 0.5 Bootstrap Engine (larger — real bootstrap orchestration beyond the current module-registration skeleton)
+- Roadmap 0.5 Bootstrap Engine — real bootstrap orchestration (module discovery/registration, ordering, configurable run sets) beyond the current hard-coded module-registration skeleton in `Bootstrap.ps1`
 
 ## Repository Health
 - ~40% toward v1.0 (4 of 10 Roadmap milestones substantively complete: 0.1, 0.2, 0.3, 0.4)
