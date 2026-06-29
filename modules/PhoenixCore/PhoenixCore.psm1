@@ -10,6 +10,43 @@
     Depends on PhoenixLogging being imported first (for Write-PhoenixLog).
 #>
 
+function Get-PhoenixVersion {
+    <#
+        .SYNOPSIS
+        Returns the current Project Phoenix version as a structured object.
+
+        .DESCRIPTION
+        Reads the VERSION file at the repository root - the single source of
+        truth for the project's version - and returns it alongside its
+        Major/Minor/Patch components.
+
+        .PARAMETER RootPath
+        The Project Phoenix repository root - the directory containing the
+        VERSION file.
+    #>
+    [CmdletBinding()]
+    [OutputType([PSCustomObject])]
+    param(
+        [Parameter(Mandatory)]
+        [string]$RootPath
+    )
+
+    $versionPath = Join-Path $RootPath 'VERSION'
+    if (-not (Test-Path -LiteralPath $versionPath)) {
+        throw "VERSION file not found at $versionPath"
+    }
+
+    $versionString = (Get-Content -LiteralPath $versionPath -Raw).Trim()
+    $parts = $versionString -split '\.'
+
+    return [PSCustomObject]@{
+        Version = $versionString
+        Major   = [int]$parts[0]
+        Minor   = [int]$parts[1]
+        Patch   = [int]$parts[2]
+    }
+}
+
 function Invoke-PhoenixModuleLifecycle {
     <#
         .SYNOPSIS
@@ -103,4 +140,4 @@ function Invoke-PhoenixBootstrap {
     return $results
 }
 
-Export-ModuleMember -Function Invoke-PhoenixModuleLifecycle, Invoke-PhoenixBootstrap
+Export-ModuleMember -Function Get-PhoenixVersion, Invoke-PhoenixModuleLifecycle, Invoke-PhoenixBootstrap

@@ -9,12 +9,22 @@
     See ARCHITECTURE.md for the full design.
 #>
 [CmdletBinding()]
-param()
+param(
+    [switch]$Version
+)
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
 $root = $PSScriptRoot
+
+if ($Version) {
+    Import-Module (Join-Path $root 'modules/PhoenixLogging/PhoenixLogging.psd1') -Force
+    Import-Module (Join-Path $root 'modules/PhoenixCore/PhoenixCore.psd1') -Force
+    Write-Output "Project Phoenix v$((Get-PhoenixVersion -RootPath $root).Version)"
+    return
+}
+
 $transcriptPath = Join-Path $root "logs/transcript-$(Get-Date -Format 'yyyyMMdd-HHmmss').log"
 New-Item -ItemType Directory -Path (Join-Path $root 'logs') -Force | Out-Null
 Start-Transcript -Path $transcriptPath -Force | Out-Null
@@ -28,7 +38,8 @@ try {
     Initialize-PhoenixLog -LogDirectory (Join-Path $root 'logs')
 
     $config = Get-PhoenixConfiguration -RootPath $root
-    Write-PhoenixLog -Level INFO -Message "Project Phoenix v$($config.version) starting..."
+    $phoenixVersion = Get-PhoenixVersion -RootPath $root
+    Write-PhoenixLog -Level INFO -Message "Project Phoenix v$($phoenixVersion.Version) starting... (config version: $($config.version))"
 
     $modules = @(
         Get-ExampleModuleDefinition
