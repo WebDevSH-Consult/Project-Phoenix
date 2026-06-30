@@ -4,9 +4,12 @@
     Project Phoenix entry point.
 
     .DESCRIPTION
-    Loads configuration, then routes every registered module through Phoenix Core's
-    lifecycle dispatcher (Initialise -> Validate -> Execute -> Verify -> Log -> Report).
-    See ARCHITECTURE.md for the full design.
+    Loads configuration, then hands off to the Bootstrap Engine (PhoenixBootstrap),
+    which discovers every module under modules/ with a module.json manifest, resolves
+    their dependency order, and runs each one through Phoenix Core's lifecycle
+    dispatcher (Initialise -> Validate -> Execute -> Verify -> Log -> Report).
+    Bootstrap.ps1 itself knows nothing about any specific module - see
+    modules/PhoenixBootstrap/README.md and ARCHITECTURE.md for the full design.
 #>
 [CmdletBinding()]
 param(
@@ -33,7 +36,7 @@ try {
     Import-Module (Join-Path $root 'modules/PhoenixLogging/PhoenixLogging.psd1') -Force
     Import-Module (Join-Path $root 'modules/PhoenixCore/PhoenixCore.psd1') -Force
     Import-Module (Join-Path $root 'modules/PhoenixConfig/PhoenixConfig.psd1') -Force
-    Import-Module (Join-Path $root 'modules/Example/Example.psd1') -Force
+    Import-Module (Join-Path $root 'modules/PhoenixBootstrap/PhoenixBootstrap.psd1') -Force
 
     Initialize-PhoenixLog -LogDirectory (Join-Path $root 'logs')
 
@@ -41,11 +44,7 @@ try {
     $phoenixVersion = Get-PhoenixVersion -RootPath $root
     Write-PhoenixLog -Level INFO -Message "Project Phoenix v$($phoenixVersion.Version) starting... (config version: $($config.version))"
 
-    $modules = @(
-        Get-ExampleModuleDefinition
-    )
-
-    $null = Invoke-PhoenixBootstrap -Modules $modules
+    $null = Invoke-PhoenixOrchestration -RootPath $root
 
     Write-PhoenixLog -Level SUCCESS -Message 'Bootstrap complete.'
 }
