@@ -25,3 +25,14 @@ Post-Foundation — Phoenix Core build-out (Roadmap 0.1–0.4 complete, working 
 - v0.2.0 tagged and released: https://github.com/WebDevSH-Consult/Project-Phoenix/releases/tag/v0.2.0
 - Repository is public; branch rulesets active on `main`/`develop` (PR required, 5 CI checks required, no force-push/deletion).
 - CI passing on `develop` HEAD.
+
+## Current Repository Metrics
+
+Modules: 3
+Tests: 24
+PowerShell Files: 12
+Markdown Documents: 18
+GitHub Workflows: 2
+CI Status: Passing
+Open Issues: 4
+Open PRs: 0
