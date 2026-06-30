@@ -1,0 +1,8 @@
+{
+  "Name": "Example",
+  "Version": "0.1.0",
+  "Dependencies": [],
+  "RunOrder": 10,
+  "Enabled": true,
+  "EntryPoint": "Get-ExampleModuleDefinition"
+}
