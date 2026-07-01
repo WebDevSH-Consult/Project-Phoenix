@@ -1,0 +1,11 @@
+{
+  "Name": "Visual Studio Code",
+  "Installer": "Winget",
+  "Id": "Microsoft.VisualStudioCode",
+  "ConfigFlag": "applications.InstallVSCode",
+  "Validate": [
+    { "Type": "Command", "Value": "code" }
+  ],
+  "Dependencies": [],
+  "RunOrder": 100
+}

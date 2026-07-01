@@ -1,0 +1,11 @@
+{
+  "Name": "7-Zip",
+  "Installer": "Winget",
+  "Id": "7zip.7zip",
+  "ConfigFlag": "applications.InstallSevenZip",
+  "Validate": [
+    { "Type": "WinGetPackage", "Value": "7zip.7zip" }
+  ],
+  "Dependencies": [],
+  "RunOrder": 100
+}
