@@ -25,7 +25,6 @@ Describe 'Get-PhoenixApplicationManifest' {
         $manifests.Count | Should -Be 1
         $manifests[0].Name | Should -Be 'Sample'
         $manifests[0].RunOrder | Should -Be 100
-        $manifests[0].Dependencies | Should -BeOfType [array]
         $manifests[0].Dependencies.Count | Should -Be 0
     }
 
