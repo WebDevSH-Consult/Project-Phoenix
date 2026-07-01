@@ -1,0 +1,8 @@
+{
+  "Name": "Validation",
+  "Version": "0.1.0",
+  "Dependencies": [],
+  "RunOrder": 90,
+  "Enabled": true,
+  "EntryPoint": "Get-ValidationModuleDefinition"
+}
