@@ -12,6 +12,9 @@ All notable changes to this project are documented in this file. Format follows 
 - `modules/PhoenixBootstrap`: the Bootstrap Engine (Roadmap 0.5). Discovers every module under `modules/` declaring a `module.json` manifest (`Get-PhoenixModuleManifest`), resolves dependency/run order (`Resolve-PhoenixModuleOrder`), and executes them via the existing `Invoke-PhoenixBootstrap` (`Invoke-PhoenixOrchestration`). `Bootstrap.ps1` now contains no reference to any specific module — adding a new one (Steam, Epic, Windows Configuration, AI tooling, etc.) is purely additive. See ADR [0006](docs/adr/0006-module-manifest-and-orchestration.md).
 - `modules/Example` gained a `module.json`, becoming the first orchestrated module discovered automatically rather than hard-coded into `Bootstrap.ps1`.
 - Pester tests covering manifest discovery/validation, dependency resolution (ordering, tie-breaking, missing dependencies, cycles), and an end-to-end orchestration run.
+- `modules/Validation`: the System Validation engine (EPIC-04). Generic PASS/WARN/FAIL check contract via `Invoke-PhoenixValidationReport`; hardware-agnostic GPU detection (`Test-PhoenixGpu`, never assumes AMD or NVIDIA), plus generic PATH-command and Microsoft Store package checks. Orchestrated automatically via `module.json` (`RunOrder: 90`, so validation runs after other modules).
+- `docs/roadmap/EPIC-04-System-Validation.md`: tracks the full System Validation & Self-Healing epic, including what's implemented today versus planned per-installer follow-on work.
+- `CONTRIBUTING.md`: new "Validation First" standard — every check returns PASS/WARN/FAIL, logs its result, never assumes a hardware vendor or Store package presence, and has mocked Pester coverage.
 
 ## [0.2.0] - Phoenix Core
 
