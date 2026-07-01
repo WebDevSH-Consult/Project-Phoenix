@@ -153,6 +153,79 @@ function Test-PhoenixAppxPackageAvailable {
     return New-PhoenixValidationResult -Category 'Windows' -Name $DisplayName -Status 'WARN' -Message "Not installed. This may be expected depending on workstation profile."
 }
 
+function Test-PhoenixPathExists {
+    <#
+        .SYNOPSIS
+        Validates whether a filesystem path exists.
+
+        .DESCRIPTION
+        Absence is reported as WARN, not FAIL - a missing optional path
+        (e.g. an application that may or may not be installed on this
+        workstation profile) is not necessarily an error.
+    #>
+    [CmdletBinding()]
+    [OutputType([PSCustomObject])]
+    param(
+        [Parameter(Mandatory)]
+        [string]$Path,
+
+        [Parameter(Mandatory)]
+        [string]$DisplayName
+    )
+
+    if (Test-Path -LiteralPath $Path) {
+        return New-PhoenixValidationResult -Category 'Windows' -Name $DisplayName -Status 'PASS' -Message "Found at $Path"
+    }
+
+    return New-PhoenixValidationResult -Category 'Windows' -Name $DisplayName -Status 'WARN' -Message "Not found at $Path. This may be expected depending on workstation profile."
+}
+
+function Invoke-PhoenixWinGetList {
+    <#
+        .SYNOPSIS
+        Thin, mockable wrapper around `winget list`.
+    #>
+    [CmdletBinding()]
+    [OutputType([PSCustomObject])]
+    param(
+        [Parameter(Mandatory)]
+        [string]$PackageId
+    )
+
+    $output = & winget list --id $PackageId --exact --accept-source-agreements 2>&1
+    return [PSCustomObject]@{
+        ExitCode = $LASTEXITCODE
+        Output   = $output -join "`n"
+    }
+}
+
+function Test-PhoenixWinGetPackageInstalled {
+    <#
+        .SYNOPSIS
+        Validates whether WinGet reports a package as installed.
+
+        .DESCRIPTION
+        Absence is reported as WARN, not FAIL - Phoenix never assumes a
+        WinGet-installed package is expected on every workstation profile.
+    #>
+    [CmdletBinding()]
+    [OutputType([PSCustomObject])]
+    param(
+        [Parameter(Mandatory)]
+        [string]$PackageId,
+
+        [Parameter(Mandatory)]
+        [string]$DisplayName
+    )
+
+    $result = Invoke-PhoenixWinGetList -PackageId $PackageId
+    if ($result.ExitCode -eq 0 -and $result.Output -match [regex]::Escape($PackageId)) {
+        return New-PhoenixValidationResult -Category 'Applications' -Name $DisplayName -Status 'PASS' -Message "WinGet reports '$PackageId' installed."
+    }
+
+    return New-PhoenixValidationResult -Category 'Applications' -Name $DisplayName -Status 'WARN' -Message "WinGet does not report '$PackageId' as installed. This may be expected depending on workstation profile."
+}
+
 function Invoke-PhoenixValidationReport {
     <#
         .SYNOPSIS
@@ -200,4 +273,4 @@ function Get-ValidationModuleDefinition {
     }
 }
 
-Export-ModuleMember -Function Get-PhoenixGpuInfo, Test-PhoenixGpu, Test-PhoenixCommandAvailable, Test-PhoenixAppxPackageAvailable, Invoke-PhoenixValidationReport, Get-ValidationModuleDefinition
+Export-ModuleMember -Function Get-PhoenixGpuInfo, Test-PhoenixGpu, Test-PhoenixCommandAvailable, Test-PhoenixAppxPackageAvailable, Test-PhoenixPathExists, Test-PhoenixWinGetPackageInstalled, Invoke-PhoenixValidationReport, Get-ValidationModuleDefinition
