@@ -9,7 +9,7 @@ Project Phoenix follows semantic versioning. Each milestone below represents a m
 | 0.3     | Logging Engine                          |
 | 0.4     | Configuration Engine                    |
 | 0.5     | Bootstrap Engine                        |
-| 0.6     | Application Installer                   |
+| 0.6     | Application Deployment Engine            |
 | 0.7     | Windows Configuration                   |
 | 0.8     | Gaming Suite                            |
 | 0.9     | Health Dashboard                        |
