@@ -1,0 +1,8 @@
+{
+  "Name": "WindowsConfig",
+  "Version": "0.1.0",
+  "Dependencies": [],
+  "RunOrder": 40,
+  "Enabled": true,
+  "EntryPoint": "Get-WindowsConfigModuleDefinition"
+}

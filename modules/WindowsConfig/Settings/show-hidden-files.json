@@ -1,0 +1,9 @@
+{
+  "Name": "Show hidden files",
+  "Type": "Registry",
+  "ConfigFlag": "windows.ShowHiddenFiles",
+  "Path": "HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Advanced",
+  "ValueName": "Hidden",
+  "DesiredValue": 1,
+  "ValueKind": "DWord"
+}
