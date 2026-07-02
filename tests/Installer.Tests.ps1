@@ -334,3 +334,161 @@ Describe 'Get-InstallerModuleDefinition' {
         $definition.Verify | Should -Not -BeNullOrEmpty
     }
 }
+
+Describe 'Get-PhoenixProfile' {
+    BeforeAll {
+        Import-Module "$PSScriptRoot/../modules/PhoenixLogging/PhoenixLogging.psd1" -Force
+        Import-Module "$PSScriptRoot/../modules/Installer/Installer.psd1" -Force
+        Initialize-PhoenixLog -LogDirectory (Join-Path $TestDrive 'logs')
+
+        function New-FixtureProfilesPath {
+            param([hashtable]$Files)
+
+            $path = Join-Path $TestDrive ([guid]::NewGuid())
+            New-Item -ItemType Directory -Path $path -Force | Out-Null
+            foreach ($entry in $Files.GetEnumerator()) {
+                Set-Content -Path (Join-Path $path $entry.Key) -Value $entry.Value
+            }
+            return $path
+        }
+    }
+
+    It 'discovers all profiles when no name is given' {
+        $path = New-FixtureProfilesPath -Files @{
+            'a.json' = '{"Name":"A","Applications":["Git"]}'
+            'b.json' = '{"Name":"B","Applications":["Steam"]}'
+        }
+
+        $profiles = Get-PhoenixProfile -ProfilesPath $path
+
+        $profiles.Count | Should -Be 2
+    }
+
+    It 'selects a profile by name' {
+        $path = New-FixtureProfilesPath -Files @{
+            'a.json' = '{"Name":"A","Description":"first","Applications":["Git"]}'
+            'b.json' = '{"Name":"B","Applications":["Steam"]}'
+        }
+
+        $result = Get-PhoenixProfile -ProfilesPath $path -ProfileName 'A'
+
+        $result.Description | Should -Be 'first'
+        $result.Applications | Should -Contain 'Git'
+    }
+
+    It 'throws with the available profile names when the requested one is missing' {
+        $path = New-FixtureProfilesPath -Files @{
+            'a.json' = '{"Name":"A","Applications":["Git"]}'
+        }
+
+        { Get-PhoenixProfile -ProfilesPath $path -ProfileName 'Ghost' } | Should -Throw '*Available profiles: A*'
+    }
+
+    It 'throws when a profile declares no applications' {
+        $path = New-FixtureProfilesPath -Files @{
+            'empty.json' = '{"Name":"Empty","Applications":[]}'
+        }
+
+        { Get-PhoenixProfile -ProfilesPath $path } | Should -Throw '*declares no applications*'
+    }
+
+    It 'throws on malformed profile JSON' {
+        $path = New-FixtureProfilesPath -Files @{
+            'broken.json' = '{ not valid json'
+        }
+
+        { Get-PhoenixProfile -ProfilesPath $path } | Should -Throw '*broken.json*'
+    }
+
+    It 'throws on duplicate profile names' {
+        $path = New-FixtureProfilesPath -Files @{
+            'x.json' = '{"Name":"Dup","Applications":["Git"]}'
+            'y.json' = '{"Name":"Dup","Applications":["Steam"]}'
+        }
+
+        { Get-PhoenixProfile -ProfilesPath $path } | Should -Throw '*Dup*'
+    }
+
+    It 'parses the real shipped profiles without error, referencing only real manifests' {
+        $repoProfiles = Get-PhoenixProfile -ProfilesPath (Resolve-Path "$PSScriptRoot/../profiles")
+        $manifests = Get-PhoenixApplicationManifest -ManifestsPath (Resolve-Path "$PSScriptRoot/../modules/Installer/Applications")
+
+        $repoProfiles.Name | Should -Contain 'Gaming'
+        $repoProfiles.Name | Should -Contain 'Development'
+        foreach ($repoProfile in $repoProfiles) {
+            foreach ($appName in $repoProfile.Applications) {
+                $manifests.Name | Should -Contain $appName
+            }
+        }
+    }
+}
+
+Describe 'Expand-PhoenixProfileApplications' {
+    BeforeAll {
+        Import-Module "$PSScriptRoot/../modules/PhoenixLogging/PhoenixLogging.psd1" -Force
+        Import-Module "$PSScriptRoot/../modules/Installer/Installer.psd1" -Force
+        Initialize-PhoenixLog -LogDirectory (Join-Path $TestDrive 'logs')
+
+        function New-FakeAppManifest {
+            param([string]$Name, [string[]]$Dependencies = @())
+            [PSCustomObject]@{ Name = $Name; Dependencies = $Dependencies; RunOrder = 100 }
+        }
+    }
+
+    It 'returns exactly the listed manifests when there are no dependencies' {
+        $manifests = @((New-FakeAppManifest 'A'), (New-FakeAppManifest 'B'), (New-FakeAppManifest 'C'))
+
+        $selected = Expand-PhoenixProfileApplications -Manifests $manifests -ApplicationNames @('A', 'C')
+
+        $selected.Count | Should -Be 2
+        $selected.Name | Should -Contain 'A'
+        $selected.Name | Should -Contain 'C'
+    }
+
+    It 'pulls in transitive dependencies not explicitly listed' {
+        $manifests = @(
+            (New-FakeAppManifest 'App' -Dependencies @('Lib'))
+            (New-FakeAppManifest 'Lib' -Dependencies @('Base'))
+            (New-FakeAppManifest 'Base')
+        )
+
+        $selected = Expand-PhoenixProfileApplications -Manifests $manifests -ApplicationNames @('App')
+
+        $selected.Count | Should -Be 3
+        $selected.Name | Should -Contain 'Base'
+    }
+
+    It 'throws when a profile references an application with no manifest' {
+        $manifests = @((New-FakeAppManifest 'A'))
+
+        { Expand-PhoenixProfileApplications -Manifests $manifests -ApplicationNames @('Ghost') } | Should -Throw '*Ghost*'
+    }
+}
+
+Describe 'Invoke-PhoenixProfile' {
+    BeforeAll {
+        Import-Module "$PSScriptRoot/../modules/PhoenixLogging/PhoenixLogging.psd1" -Force
+        Import-Module "$PSScriptRoot/../modules/Validation/Validation.psd1" -Force
+        Import-Module "$PSScriptRoot/../modules/PhoenixBootstrap/PhoenixBootstrap.psd1" -Force
+        Import-Module "$PSScriptRoot/../modules/Installer/Installer.psd1" -Force
+        Initialize-PhoenixLog -LogDirectory (Join-Path $TestDrive 'logs')
+    }
+
+    It 'installs every application the real Gaming profile lists, without touching ConfigFlags' {
+        Mock -ModuleName Installer Install-PhoenixApplication {
+            param($Manifest, $MaxAttempts)
+            [PSCustomObject]@{ Category = 'Application'; Name = $Manifest.Name; Status = 'PASS'; Message = 'mocked' }
+        }
+
+        $results = Invoke-PhoenixProfile -ProfileName 'Gaming' -RootPath (Resolve-Path "$PSScriptRoot/..")
+
+        $results.Count | Should -Be 3
+        $results.Name | Should -Contain 'Steam'
+        $results.Name | Should -Contain 'Epic Games Launcher'
+        $results.Name | Should -Contain '7-Zip'
+    }
+
+    It 'throws cleanly for an unknown profile' {
+        { Invoke-PhoenixProfile -ProfileName 'Ghost' -RootPath (Resolve-Path "$PSScriptRoot/..") } | Should -Throw '*Ghost*'
+    }
+}
