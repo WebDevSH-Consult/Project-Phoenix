@@ -4,6 +4,10 @@ All notable changes to this project are documented in this file. Format follows 
 
 ## [Unreleased]
 
+## [0.7.0] - Application Deployment Platform
+
+Covers Roadmap milestones 0.4 through 0.7 (Configuration Engine, Bootstrap Engine, Application Deployment Engine, Workstation Profiles) plus the first slice of EPIC-04 (System Validation).
+
 ### Added
 - `modules/PhoenixConfig`: configuration engine (`Get-PhoenixConfiguration`) that loads `phoenix.json` and every per-domain config file it references (`configs/windows.json`, `applications.json`, `gaming.json`, `ai.json`, `powershell.json`) into a single merged object. Missing or malformed config files fail cleanly with a logged `ERROR` entry rather than a raw exception.
 - `Bootstrap.ps1` now loads configuration through `Get-PhoenixConfiguration` instead of parsing `phoenix.json` directly.
