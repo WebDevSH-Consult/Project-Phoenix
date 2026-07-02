@@ -11,6 +11,8 @@
     needed, rather than relying on orchestration having already done so).
 #>
 
+Import-Module (Join-Path $PSScriptRoot '..\PhoenixConfig\PhoenixConfig.psd1')
+
 #region Backends - thin, mockable wrappers around the actual install invocation
 
 function Invoke-PhoenixWinGet {
@@ -197,38 +199,6 @@ function Get-PhoenixApplicationManifest {
     }
 
     return $manifests.ToArray()
-}
-
-#endregion
-
-#region Configuration gating
-
-function Get-PhoenixConfigValue {
-    <#
-        .SYNOPSIS
-        Resolves a dot-path (e.g. "applications.InstallGit") against a merged
-        Phoenix configuration object. Returns $false if any segment is
-        missing - an undeclared flag is never assumed to mean "install it".
-    #>
-    [CmdletBinding()]
-    [OutputType([bool])]
-    param(
-        [Parameter(Mandatory)]
-        [PSCustomObject]$Configuration,
-
-        [Parameter(Mandatory)]
-        [string]$Path
-    )
-
-    $current = $Configuration.Modules
-    foreach ($segment in ($Path -split '\.')) {
-        if ($null -eq $current -or $current.PSObject.Properties.Name -notcontains $segment) {
-            return $false
-        }
-        $current = $current.$segment
-    }
-
-    return [bool]$current
 }
 
 #endregion
@@ -574,4 +544,4 @@ function Get-InstallerModuleDefinition {
 
 #endregion
 
-Export-ModuleMember -Function Get-PhoenixApplicationManifest, Get-PhoenixConfigValue, Test-PhoenixApplicationSatisfied, Install-PhoenixWinGetPackage, Install-PhoenixMsiPackage, Install-PhoenixExePackage, Install-PhoenixApplication, Install-PhoenixApplications, Get-PhoenixProfile, Expand-PhoenixProfileApplications, Invoke-PhoenixProfile, Get-InstallerModuleDefinition
+Export-ModuleMember -Function Get-PhoenixApplicationManifest, Test-PhoenixApplicationSatisfied, Install-PhoenixWinGetPackage, Install-PhoenixMsiPackage, Install-PhoenixExePackage, Install-PhoenixApplication, Install-PhoenixApplications, Get-PhoenixProfile, Expand-PhoenixProfileApplications, Invoke-PhoenixProfile, Get-InstallerModuleDefinition

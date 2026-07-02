@@ -86,4 +86,37 @@ function Get-PhoenixConfiguration {
     return [PSCustomObject]$config
 }
 
-Export-ModuleMember -Function Get-PhoenixConfiguration
+function Get-PhoenixConfigValue {
+    <#
+        .SYNOPSIS
+        Resolves a dot-path (e.g. "applications.InstallGit") against a merged
+        Phoenix configuration object. Returns $false if any segment is
+        missing - an undeclared flag is never assumed to mean "enabled".
+
+        .DESCRIPTION
+        Moved here from modules/Installer (its original home) per ADR 0009:
+        both the Installer and WindowsConfig modules gate their manifests on
+        configuration dot-paths, and this is a configuration concern.
+    #>
+    [CmdletBinding()]
+    [OutputType([bool])]
+    param(
+        [Parameter(Mandatory)]
+        [PSCustomObject]$Configuration,
+
+        [Parameter(Mandatory)]
+        [string]$Path
+    )
+
+    $current = $Configuration.Modules
+    foreach ($segment in ($Path -split '\.')) {
+        if ($null -eq $current -or $current.PSObject.Properties.Name -notcontains $segment) {
+            return $false
+        }
+        $current = $current.$segment
+    }
+
+    return [bool]$current
+}
+
+Export-ModuleMember -Function Get-PhoenixConfiguration, Get-PhoenixConfigValue
