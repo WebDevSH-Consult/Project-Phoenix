@@ -352,6 +352,191 @@ function Install-PhoenixApplications {
 
 #endregion
 
+#region Workstation profiles (ADR 0008)
+
+function Get-PhoenixProfile {
+    <#
+        .SYNOPSIS
+        Discovers workstation profiles under ProfilesPath, optionally
+        selecting one by name.
+
+        .DESCRIPTION
+        Each profile is a JSON file with Name, Description, and a non-empty
+        Applications array of application manifest names. Without
+        -ProfileName, returns every discovered profile; with it, returns the
+        matching profile or throws, listing what was available.
+    #>
+    [CmdletBinding()]
+    [OutputType([PSCustomObject[]])]
+    param(
+        [Parameter(Mandatory)]
+        [string]$ProfilesPath,
+
+        [string]$ProfileName
+    )
+
+    $profiles = [System.Collections.Generic.List[PSCustomObject]]::new()
+    $seenNames = @{}
+
+    $files = Get-ChildItem -LiteralPath $ProfilesPath -Filter '*.json' -File -ErrorAction SilentlyContinue
+    foreach ($file in $files) {
+        try {
+            $raw = Get-Content -LiteralPath $file.FullName -Raw | ConvertFrom-Json
+        }
+        catch {
+            Write-PhoenixLog -Level ERROR -Message "Failed to parse profile '$($file.Name)': $($_.Exception.Message)"
+            throw "Failed to parse profile '$($file.Name)': $($_.Exception.Message)"
+        }
+
+        foreach ($field in @('Name', 'Applications')) {
+            if ($raw.PSObject.Properties.Name -notcontains $field) {
+                Write-PhoenixLog -Level ERROR -Message "Profile '$($file.Name)' is missing required field '$field'."
+                throw "Profile '$($file.Name)' is missing required field '$field'."
+            }
+        }
+
+        if (@($raw.Applications).Count -eq 0) {
+            Write-PhoenixLog -Level ERROR -Message "Profile '$($file.Name)' declares no applications."
+            throw "Profile '$($file.Name)' declares no applications."
+        }
+
+        if ($seenNames.ContainsKey($raw.Name)) {
+            Write-PhoenixLog -Level ERROR -Message "Duplicate profile name '$($raw.Name)' found in '$($file.Name)' and '$($seenNames[$raw.Name])'."
+            throw "Duplicate profile name '$($raw.Name)' found in '$($file.Name)' and '$($seenNames[$raw.Name])'."
+        }
+        $seenNames[$raw.Name] = $file.Name
+
+        $description = ''
+        if ($raw.PSObject.Properties.Name -contains 'Description') {
+            $description = [string]$raw.Description
+        }
+
+        $profiles.Add([PSCustomObject]@{
+            Name         = [string]$raw.Name
+            Description  = $description
+            Applications = @($raw.Applications)
+        })
+    }
+
+    if (-not $PSBoundParameters.ContainsKey('ProfileName') -or [string]::IsNullOrEmpty($ProfileName)) {
+        return $profiles.ToArray()
+    }
+
+    $match = $profiles | Where-Object { $_.Name -eq $ProfileName }
+    if (-not $match) {
+        $available = if ($profiles.Count -gt 0) { ($profiles.Name -join ', ') } else { 'none' }
+        Write-PhoenixLog -Level ERROR -Message "Profile '$ProfileName' not found. Available profiles: $available."
+        throw "Profile '$ProfileName' not found. Available profiles: $available."
+    }
+
+    return $match
+}
+
+function Expand-PhoenixProfileApplications {
+    <#
+        .SYNOPSIS
+        Resolves a profile's application names to their manifests, pulling
+        in transitive dependencies not explicitly listed.
+
+        .DESCRIPTION
+        An application name (listed directly or reached via a dependency)
+        with no matching manifest fails loudly - a profile may only promise
+        what Phoenix can actually install.
+    #>
+    [CmdletBinding()]
+    [OutputType([PSCustomObject[]])]
+    param(
+        [Parameter(Mandatory)]
+        [PSCustomObject[]]$Manifests,
+
+        [Parameter(Mandatory)]
+        [string[]]$ApplicationNames
+    )
+
+    $byName = @{}
+    foreach ($manifest in $Manifests) { $byName[$manifest.Name] = $manifest }
+
+    $selected = [ordered]@{}
+    $queue = [System.Collections.Generic.Queue[string]]::new()
+    foreach ($name in $ApplicationNames) { $queue.Enqueue($name) }
+
+    while ($queue.Count -gt 0) {
+        $name = $queue.Dequeue()
+        if ($selected.Contains($name)) { continue }
+
+        if (-not $byName.ContainsKey($name)) {
+            Write-PhoenixLog -Level ERROR -Message "Profile references application '$name', which has no manifest under Applications/."
+            throw "Profile references application '$name', which has no manifest under Applications/."
+        }
+
+        $selected[$name] = $byName[$name]
+        foreach ($dependency in $byName[$name].Dependencies) {
+            $queue.Enqueue($dependency)
+        }
+    }
+
+    return @($selected.Values)
+}
+
+function Invoke-PhoenixProfile {
+    <#
+        .SYNOPSIS
+        Installs every application a workstation profile lists, plus
+        transitive dependencies, in dependency order.
+
+        .DESCRIPTION
+        A profile is an explicit selection: it installs exactly what it
+        lists regardless of ConfigFlag values, which gate only the default
+        orchestrated run. Inherits Install-PhoenixApplication's idempotency,
+        retry, and post-install validation unchanged. See ADR 0008.
+
+        .EXAMPLE
+        Invoke-PhoenixProfile -ProfileName Gaming
+    #>
+    [CmdletBinding()]
+    [OutputType([PSCustomObject[]])]
+    param(
+        [Parameter(Mandatory, Position = 0)]
+        [string]$ProfileName,
+
+        [string]$RootPath,
+
+        [int]$MaxAttempts = 2
+    )
+
+    Import-Module (Join-Path $PSScriptRoot '..\Validation\Validation.psd1') -Force
+    Import-Module (Join-Path $PSScriptRoot '..\PhoenixBootstrap\PhoenixBootstrap.psd1') -Force
+
+    if (-not $RootPath) {
+        $RootPath = Resolve-Path (Join-Path $PSScriptRoot '..\..')
+    }
+
+    $workstationProfile = Get-PhoenixProfile -ProfilesPath (Join-Path $RootPath 'profiles') -ProfileName $ProfileName
+    Write-PhoenixLog -Level INFO -Message "[Installer] Applying profile '$($workstationProfile.Name)': $($workstationProfile.Applications -join ', ')"
+
+    $manifests = Get-PhoenixApplicationManifest -ManifestsPath (Join-Path $PSScriptRoot 'Applications')
+    $selected = Expand-PhoenixProfileApplications -Manifests $manifests -ApplicationNames $workstationProfile.Applications
+    $ordered = Resolve-PhoenixModuleOrder -Manifests $selected
+
+    $results = @(
+        foreach ($manifest in $ordered) {
+            Install-PhoenixApplication -Manifest $manifest -MaxAttempts $MaxAttempts
+        }
+    )
+
+    $failed = @($results | Where-Object Status -eq 'FAIL')
+    if ($failed.Count -gt 0) {
+        Write-PhoenixLog -Level WARNING -Message "[Installer] Profile '$($workstationProfile.Name)' completed with $($failed.Count) failure(s) out of $($results.Count) application(s)."
+    }
+    else {
+        Write-PhoenixLog -Level SUCCESS -Message "[Installer] Profile '$($workstationProfile.Name)' applied: $($results.Count) application(s) verified."
+    }
+
+    return $results
+}
+
+#endregion
+
 #region Bootstrap Engine integration
 
 function Get-InstallerModuleDefinition {
@@ -389,4 +574,4 @@ function Get-InstallerModuleDefinition {
 
 #endregion
 
-Export-ModuleMember -Function Get-PhoenixApplicationManifest, Get-PhoenixConfigValue, Test-PhoenixApplicationSatisfied, Install-PhoenixWinGetPackage, Install-PhoenixMsiPackage, Install-PhoenixExePackage, Install-PhoenixApplication, Install-PhoenixApplications, Get-InstallerModuleDefinition
+Export-ModuleMember -Function Get-PhoenixApplicationManifest, Get-PhoenixConfigValue, Test-PhoenixApplicationSatisfied, Install-PhoenixWinGetPackage, Install-PhoenixMsiPackage, Install-PhoenixExePackage, Install-PhoenixApplication, Install-PhoenixApplications, Get-PhoenixProfile, Expand-PhoenixProfileApplications, Invoke-PhoenixProfile, Get-InstallerModuleDefinition

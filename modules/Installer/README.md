@@ -56,6 +56,28 @@ Bare filename strings (e.g. `"EpicGamesLauncher.exe"`) are deliberately **not** 
 
 Every result is `{ Category: 'Application', Name, Status, Message }` — the same shape [modules/Validation](../Validation/README.md) uses, so installer and validation results compose into one vocabulary.
 
+## Workstation profiles
+
+A profile is a JSON file under [`profiles/`](../../profiles/) at the repository root — a named, explicit application selection (see [ADR 0008](../../docs/adr/0008-workstation-profiles.md)):
+
+```json
+{
+  "Name": "Gaming",
+  "Description": "Game launchers and supporting tools.",
+  "Applications": ["Steam", "Epic Games Launcher", "7-Zip"]
+}
+```
+
+```powershell
+Invoke-PhoenixProfile Gaming
+```
+
+`Invoke-PhoenixProfile` expands the list to include transitive dependencies, orders it with `Resolve-PhoenixModuleOrder`, and installs each application via `Install-PhoenixApplication` — inheriting its idempotency, retry, and validation behaviour unchanged.
+
+**A profile bypasses `ConfigFlag` gating.** Config flags answer "what does this workstation get by default?" (the orchestrated `Bootstrap.ps1` run); a profile answers "make this a gaming machine" — an explicit, deliberate selection. The two mechanisms are intentionally orthogonal.
+
+A profile may only reference applications that have manifests — an unknown name fails loudly at expansion time, before anything installs. Shipped profiles: `Gaming`, `Development`.
+
 ## Why `module.json` declares no `Dependencies`
 
 `Installer` calls into `Validation`'s exported functions, but that's a **code** dependency (it `Import-Module`s `Validation.psd1` itself, inside its own `Initialize` stage), not an **orchestration** dependency. Declaring `Validation` as a module.json dependency would force Validation's full lifecycle to run *before* Installer's — the opposite of Validation's intended `RunOrder: 90` ("run last, check what was just done"). The two kinds of dependency are different; only the orchestration kind belongs in `module.json`.
