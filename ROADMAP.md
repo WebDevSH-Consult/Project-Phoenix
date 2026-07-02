@@ -9,16 +9,19 @@ Project Phoenix follows semantic versioning. Each milestone below represents a m
 | 0.3     | Logging Engine                          |
 | 0.4     | Configuration Engine                    |
 | 0.5     | Bootstrap Engine                        |
-| 0.6     | Application Installer                   |
-| 0.7     | Windows Configuration                   |
-| 0.8     | Gaming Suite                            |
+| 0.6     | Application Deployment Engine            |
+| 0.7     | Workstation Profiles                    |
+| 0.8     | Windows Configuration                   |
 | 0.9     | Health Dashboard                        |
-| 1.0     | First Complete Self-Build Workstation   |
+| 1.0     | Fully Unattended Workstation Rebuild    |
+
+The former "Gaming Suite" milestone is absorbed: gaming applications are now manifests (`modules/Installer/Applications/`) selected by the `Gaming` profile (`profiles/gaming.json`) — no dedicated suite needed.
 
 ## Beyond 1.0
 
+- Self-Healing Engine (scheduled drift detection and remediation — extends [EPIC-04](./docs/roadmap/EPIC-04-System-Validation.md))
+- Cloud sync & configuration export
 - AI Command Centre (local + cloud AI tooling orchestration)
-- Self-healing workstation (scheduled drift detection and remediation)
 - Backup & recovery manager
 - Community contribution support (if opened up beyond personal use)
 

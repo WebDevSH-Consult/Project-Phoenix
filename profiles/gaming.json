@@ -1,0 +1,9 @@
+{
+  "Name": "Gaming",
+  "Description": "Game launchers and supporting tools.",
+  "Applications": [
+    "Steam",
+    "Epic Games Launcher",
+    "7-Zip"
+  ]
+}

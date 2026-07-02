@@ -3,5 +3,6 @@
   "InstallPython": true,
   "InstallNode": true,
   "InstallDocker": false,
-  "InstallVSCode": true
+  "InstallVSCode": true,
+  "InstallSevenZip": true
 }

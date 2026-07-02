@@ -30,3 +30,7 @@ See [modules/Example](../Example/README.md) for a minimal module implementing th
 ## Running a batch of modules
 
 `Invoke-PhoenixBootstrap -Modules @(...)` runs each module hashtable through the lifecycle in order and logs an aggregate health report. This is what `Bootstrap.ps1` calls.
+
+## Version reporting
+
+`Get-PhoenixVersion -RootPath <repo root>` reads the `VERSION` file (the single source of truth for the project's version) and returns `Version`, `Major`, `Minor`, and `Patch`. `Bootstrap.ps1` calls this at startup to log the running version, and exposes a `-Version` switch that prints it and exits without running any modules.

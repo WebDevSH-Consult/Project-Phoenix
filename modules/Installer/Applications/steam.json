@@ -1,0 +1,11 @@
+{
+  "Name": "Steam",
+  "Installer": "Winget",
+  "Id": "Valve.Steam",
+  "ConfigFlag": "gaming.InstallSteam",
+  "Validate": [
+    { "Type": "WinGetPackage", "Value": "Valve.Steam" }
+  ],
+  "Dependencies": [],
+  "RunOrder": 100
+}

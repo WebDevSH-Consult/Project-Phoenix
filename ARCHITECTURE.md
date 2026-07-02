@@ -8,6 +8,10 @@ Project Phoenix is built around a single entry point and a central core. No modu
                     Bootstrap.ps1
                           │
                           ▼
+                Phoenix Bootstrap Engine
+        (discover → validate → resolve order)
+                          │
+                          ▼
                    Phoenix Core
                           │
       ┌───────────────────┼───────────────────┐
@@ -18,6 +22,8 @@ Project Phoenix is built around a single entry point and a central core. No modu
       ▼
  Configuration Manager
 ```
+
+`Bootstrap.ps1` knows nothing about any specific module. It imports the engine (`PhoenixLogging`, `PhoenixCore`, `PhoenixConfig`, `PhoenixBootstrap`) and calls `Invoke-PhoenixOrchestration`, which discovers every module under `modules/` declaring a `module.json` manifest, resolves their dependency order, and runs each one through Phoenix Core's lifecycle dispatcher. See [modules/PhoenixBootstrap/README.md](./modules/PhoenixBootstrap/README.md) and ADR [0006](./docs/adr/0006-module-manifest-and-orchestration.md) for the full design.
 
 ## Module Lifecycle
 

@@ -1,0 +1,11 @@
+{
+  "Name": "Epic Games Launcher",
+  "Installer": "Winget",
+  "Id": "EpicGames.EpicGamesLauncher",
+  "ConfigFlag": "gaming.InstallEpic",
+  "Validate": [
+    { "Type": "WinGetPackage", "Value": "EpicGames.EpicGamesLauncher" }
+  ],
+  "Dependencies": [],
+  "RunOrder": 100
+}

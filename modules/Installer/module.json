@@ -1,0 +1,8 @@
+{
+  "Name": "Installer",
+  "Version": "0.1.0",
+  "Dependencies": [],
+  "RunOrder": 50,
+  "Enabled": true,
+  "EntryPoint": "Get-InstallerModuleDefinition"
+}

@@ -1,0 +1,11 @@
+{
+  "Name": "Git",
+  "Installer": "Winget",
+  "Id": "Git.Git",
+  "ConfigFlag": "applications.InstallGit",
+  "Validate": [
+    { "Type": "Command", "Value": "git" }
+  ],
+  "Dependencies": [],
+  "RunOrder": 100
+}
