@@ -1,0 +1,10 @@
+{
+  "Name": "Development",
+  "Description": "Core software development tooling.",
+  "Applications": [
+    "Git",
+    "Visual Studio Code",
+    "PowerShell 7",
+    "7-Zip"
+  ]
+}
