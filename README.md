@@ -2,7 +2,7 @@
 
 > A fully automated, AI-powered Windows workstation platform that can rebuild itself from a clean Windows installation.
 
-[![Version](https://img.shields.io/badge/version-0.2.0--phoenix--core-orange)](./CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-0.7.0--profiles-orange)](./CHANGELOG.md)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue)](./LICENSE)
 
 Project Phoenix is not a script. It is a platform: a modular, version-controlled, self-validating system for building, configuring, and maintaining a Windows workstation as Infrastructure-as-Code.
@@ -66,4 +66,4 @@ See [CONTRIBUTING.md](./CONTRIBUTING.md) for the full branch strategy, commit st
 
 ## Status
 
-**Version 0.2.0 — Phoenix Core.** Phoenix Core, the logging engine, and a working `Bootstrap.ps1` are in place. No real automation modules (Windows config, app installer, gaming, etc.) yet — those land in later sprints per [ROADMAP.md](./ROADMAP.md).
+**Version 0.7.0 — Application Deployment Platform.** The engine stack is complete through Roadmap 0.7: configuration, orchestration, a manifest-driven application installer (`modules/Installer`), hardware-agnostic validation (`modules/Validation`), and workstation profiles (`Invoke-PhoenixProfile Gaming` / `Development`). Next up: Windows Configuration (0.8) and the Health Dashboard (0.9) per [ROADMAP.md](./ROADMAP.md).
