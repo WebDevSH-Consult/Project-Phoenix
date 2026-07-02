@@ -19,6 +19,8 @@ All notable changes to this project are documented in this file. Format follows 
 - `modules/Validation` gained `Test-PhoenixPathExists` and `Test-PhoenixWinGetPackageInstalled`, the concrete mechanism behind "once installers exist, validation can check them automatically."
 - `configs/applications.json` gained `InstallSevenZip`, needed to gate the new 7-Zip manifest.
 - Pester tests covering manifest discovery/validation, config-value resolution, install/retry/failure flows (all backends mocked — no test ever runs a real installer), and dependency-ordered bulk installation.
+- Workstation Profiles (Roadmap 0.7): `profiles/*.json` name an explicit application selection; `Invoke-PhoenixProfile Gaming` (or `Development`) expands transitive dependencies, orders via `Resolve-PhoenixModuleOrder`, and installs through the existing engine — bypassing `ConfigFlag` gating, which remains the default-run mechanism. A profile may only reference applications with manifests; unknown names fail loudly before anything installs. See ADR [0008](docs/adr/0008-workstation-profiles.md).
+- `ROADMAP.md` restructured: 0.7 is now Workstation Profiles, Windows Configuration moves to 0.8, the Gaming Suite milestone is absorbed by manifests + the Gaming profile, and Self-Healing/Cloud Sync move to Beyond 1.0.
 
 ## [0.2.0] - Phoenix Core
 
