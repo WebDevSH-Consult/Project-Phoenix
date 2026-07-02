@@ -4,6 +4,14 @@ All notable changes to this project are documented in this file. Format follows 
 
 ## [Unreleased]
 
+### Added
+- `modules/WindowsConfig`: the Windows Configuration Engine (Roadmap 0.8). Every Windows setting is a JSON manifest under `modules/WindowsConfig/Settings/`, mirroring the Installer's design: config-flag gated, idempotent (reads current state first, skips if already desired), records the previous value as rollback data, and re-reads after writing to verify. First mechanism is Registry (HKCU only — no elevation required); ships settings for file extensions, hidden files, and dark mode, finally making `configs/windows.json`'s flags do something. Orchestrated at `RunOrder: 40` (before the Installer). See ADR [0009](docs/adr/0009-windows-configuration-engine.md).
+- `configs/windows.json` gained `ShowHiddenFiles`.
+- Pester tests covering setting-manifest discovery/validation, applied-state detection, apply/verify/failure flows (registry access fully mocked), config gating, and the orchestrated lifecycle.
+
+### Changed
+- `Get-PhoenixConfigValue` moved from `modules/Installer` to its canonical home in `modules/PhoenixConfig` — both Installer and WindowsConfig gate manifests on configuration dot-paths, and it is a configuration concern. `Installer` now imports `PhoenixConfig` at module load.
+
 ## [0.7.0] - Application Deployment Platform
 
 Covers Roadmap milestones 0.4 through 0.7 (Configuration Engine, Bootstrap Engine, Application Deployment Engine, Workstation Profiles) plus the first slice of EPIC-04 (System Validation).

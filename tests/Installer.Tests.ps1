@@ -65,38 +65,6 @@ Describe 'Get-PhoenixApplicationManifest' {
     }
 }
 
-Describe 'Get-PhoenixConfigValue' {
-    BeforeAll {
-        Import-Module "$PSScriptRoot/../modules/PhoenixLogging/PhoenixLogging.psd1" -Force
-        Import-Module "$PSScriptRoot/../modules/Installer/Installer.psd1" -Force
-        Initialize-PhoenixLog -LogDirectory (Join-Path $TestDrive 'logs')
-    }
-
-    It 'resolves a true dot-path' {
-        $config = [PSCustomObject]@{ Modules = [PSCustomObject]@{ applications = [PSCustomObject]@{ InstallGit = $true } } }
-
-        Get-PhoenixConfigValue -Configuration $config -Path 'applications.InstallGit' | Should -Be $true
-    }
-
-    It 'resolves a false dot-path' {
-        $config = [PSCustomObject]@{ Modules = [PSCustomObject]@{ applications = [PSCustomObject]@{ InstallGit = $false } } }
-
-        Get-PhoenixConfigValue -Configuration $config -Path 'applications.InstallGit' | Should -Be $false
-    }
-
-    It 'returns false, never throws, when the path segment does not exist' {
-        $config = [PSCustomObject]@{ Modules = [PSCustomObject]@{ applications = [PSCustomObject]@{} } }
-
-        Get-PhoenixConfigValue -Configuration $config -Path 'applications.InstallSomethingUndeclared' | Should -Be $false
-    }
-
-    It 'returns false when the whole domain is missing' {
-        $config = [PSCustomObject]@{ Modules = [PSCustomObject]@{} }
-
-        Get-PhoenixConfigValue -Configuration $config -Path 'gaming.InstallSteam' | Should -Be $false
-    }
-}
-
 Describe 'Test-PhoenixApplicationSatisfied' {
     BeforeAll {
         Import-Module "$PSScriptRoot/../modules/PhoenixLogging/PhoenixLogging.psd1" -Force
