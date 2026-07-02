@@ -1,0 +1,11 @@
+{
+  "Name": "PowerShell 7",
+  "Installer": "Winget",
+  "Id": "Microsoft.PowerShell",
+  "ConfigFlag": "powershell.InstallPwshCore",
+  "Validate": [
+    { "Type": "Command", "Value": "pwsh" }
+  ],
+  "Dependencies": [],
+  "RunOrder": 100
+}

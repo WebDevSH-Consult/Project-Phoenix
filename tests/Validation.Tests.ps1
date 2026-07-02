@@ -94,6 +94,59 @@ Describe 'Test-PhoenixAppxPackageAvailable' {
     }
 }
 
+Describe 'Test-PhoenixPathExists' {
+    BeforeAll {
+        Import-Module "$PSScriptRoot/../modules/PhoenixLogging/PhoenixLogging.psd1" -Force
+        Import-Module "$PSScriptRoot/../modules/Validation/Validation.psd1" -Force
+        Initialize-PhoenixLog -LogDirectory (Join-Path $TestDrive 'logs')
+    }
+
+    It 'reports PASS when the path exists' {
+        $existingPath = Join-Path $TestDrive 'exists.txt'
+        Set-Content -Path $existingPath -Value 'x'
+
+        $result = Test-PhoenixPathExists -Path $existingPath -DisplayName 'Fixture File'
+
+        $result.Status | Should -Be 'PASS'
+    }
+
+    It 'reports WARN, not FAIL, when the path does not exist' {
+        $missingPath = Join-Path $TestDrive 'does-not-exist.txt'
+
+        $result = Test-PhoenixPathExists -Path $missingPath -DisplayName 'Fixture File'
+
+        $result.Status | Should -Be 'WARN'
+    }
+}
+
+Describe 'Test-PhoenixWinGetPackageInstalled' {
+    BeforeAll {
+        Import-Module "$PSScriptRoot/../modules/PhoenixLogging/PhoenixLogging.psd1" -Force
+        Import-Module "$PSScriptRoot/../modules/Validation/Validation.psd1" -Force
+        Initialize-PhoenixLog -LogDirectory (Join-Path $TestDrive 'logs')
+    }
+
+    It 'reports PASS when WinGet lists the package' {
+        Mock -ModuleName Validation Invoke-PhoenixWinGetList {
+            [PSCustomObject]@{ ExitCode = 0; Output = "Name  Id         Version`nSteam Valve.Steam 1.0" }
+        }
+
+        $result = Test-PhoenixWinGetPackageInstalled -PackageId 'Valve.Steam' -DisplayName 'Steam'
+
+        $result.Status | Should -Be 'PASS'
+    }
+
+    It 'reports WARN, never FAIL, when WinGet does not list the package - never assumed to be expected' {
+        Mock -ModuleName Validation Invoke-PhoenixWinGetList {
+            [PSCustomObject]@{ ExitCode = 1; Output = 'No installed package found matching input criteria.' }
+        }
+
+        $result = Test-PhoenixWinGetPackageInstalled -PackageId 'Valve.Steam' -DisplayName 'Steam'
+
+        $result.Status | Should -Be 'WARN'
+    }
+}
+
 Describe 'Get-ValidationModuleDefinition' {
     BeforeAll {
         Import-Module "$PSScriptRoot/../modules/PhoenixLogging/PhoenixLogging.psd1" -Force

@@ -24,10 +24,12 @@ Every check returns a structured result, logged via `Write-PhoenixLog` as it run
 - `Test-PhoenixGpu` — detects installed GPUs via `Get-CimInstance Win32_VideoController` and reports vendor (AMD/NVIDIA/Intel) **without assuming** which one is present. An unrecognised adapter name is `WARN`, not silently ignored or guessed at.
 - `Test-PhoenixCommandAvailable` — generic PATH-command check (used for `winget`, `git`).
 - `Test-PhoenixAppxPackageAvailable` — generic Microsoft Store package check. Absence is `WARN`, never `FAIL` — Phoenix never assumes a Store package exists or is expected.
+- `Test-PhoenixPathExists` — generic filesystem path check. Absence is `WARN`.
+- `Test-PhoenixWinGetPackageInstalled` — generic check via `winget list`. Absence is `WARN`. Used by [modules/Installer](../Installer/README.md) as one of its application-detection probes — the concrete mechanism behind "once installers exist, validation can check them automatically."
 
 ## What's intentionally not implemented yet
 
-Steam, Epic, GameBar, Rockstar, Xbox Services, URI handler, and AI-tooling checks are **not** built yet. Each lands alongside the installer module it validates (Roadmap 0.6+), so it can be tested against a real installation rather than assumed to exist. See [EPIC-04](../../docs/roadmap/EPIC-04-System-Validation.md) for the full planned scope.
+GameBar, Rockstar, Xbox Services, URI handler, and AI-tooling checks are **not** built yet — no installer module exists for them yet either. Steam/Epic/Git/VS Code/7-Zip/PowerShell now have manifests in [modules/Installer](../Installer/README.md), which reuses this module's `Test-Phoenix*` probes for its own install/verify flow. See [EPIC-04](../../docs/roadmap/EPIC-04-System-Validation.md) for the full planned scope.
 
 ## Adding a new check
 
