@@ -22,8 +22,11 @@ A module is any hashtable with up to four script blocks, passed to `Invoke-Phoen
     HealthPercent  = 100
     LastRun        = '2026-06-26T09:14:21.0000000+00:00'
     Issues         = @()
+    Details        = $null     # per-item results via the optional GetDetails scriptblock (ADR 0010)
 }
 ```
+
+A definition may also include an optional `GetDetails` scriptblock returning the module's per-item results (installs, settings, checks) for the deployment report — invoked after the lifecycle completes and attached as `Details`. A `GetDetails` failure logs a warning and leaves `Details` null; it never fails the module.
 
 See [modules/Example](../Example/README.md) for a minimal module implementing this contract — copy it as a starting point for new modules.
 
