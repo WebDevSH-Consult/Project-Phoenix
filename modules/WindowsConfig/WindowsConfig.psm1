@@ -12,6 +12,7 @@
 #>
 
 Import-Module (Join-Path $PSScriptRoot '..\PhoenixConfig\PhoenixConfig.psd1')
+Import-Module (Join-Path $PSScriptRoot '..\PhoenixCore\PhoenixCore.psd1')
 
 #region Registry provider - thin, mockable wrappers around the real registry
 
@@ -127,14 +128,20 @@ function Get-PhoenixSettingManifest {
         }
         $seenNames[$raw.Name] = $file.Name
 
+        $requiresElevation = $false
+        if ($raw.PSObject.Properties.Name -contains 'RequiresElevation') {
+            $requiresElevation = [bool]$raw.RequiresElevation
+        }
+
         $manifests.Add([PSCustomObject]@{
-            Name         = [string]$raw.Name
-            Type         = [string]$raw.Type
-            ConfigFlag   = [string]$raw.ConfigFlag
-            Path         = [string]$raw.Path
-            ValueName    = [string]$raw.ValueName
-            DesiredValue = $raw.DesiredValue
-            ValueKind    = [string]$raw.ValueKind
+            Name              = [string]$raw.Name
+            Type              = [string]$raw.Type
+            ConfigFlag        = [string]$raw.ConfigFlag
+            Path              = [string]$raw.Path
+            ValueName         = [string]$raw.ValueName
+            DesiredValue      = $raw.DesiredValue
+            ValueKind         = [string]$raw.ValueKind
+            RequiresElevation = $requiresElevation
         })
     }
 
@@ -186,6 +193,13 @@ function Set-PhoenixSetting {
     if ($null -ne $previous -and "$previous" -eq "$($Manifest.DesiredValue)") {
         Write-PhoenixLog -Level SUCCESS -Message "[WindowsConfig] $($Manifest.Name): already in desired state."
         return [PSCustomObject]@{ Category = 'Setting'; Name = $Manifest.Name; Status = 'PASS'; Message = 'Already in desired state - no action taken.'; PreviousValue = $previous }
+    }
+
+    # Elevation gate (ADR 0013): reads worked above, so the idempotent skip
+    # still applies without rights; only an actual change needs elevation.
+    if ($Manifest.RequiresElevation -and -not (Test-PhoenixElevated)) {
+        Write-PhoenixLog -Level WARNING -Message "[WindowsConfig] $($Manifest.Name): requires elevation - not applied. Run Bootstrap from an elevated PowerShell to apply."
+        return [PSCustomObject]@{ Category = 'Setting'; Name = $Manifest.Name; Status = 'WARN'; Message = 'Requires elevation - not applied. Run Bootstrap from an elevated PowerShell to apply.'; PreviousValue = $previous }
     }
 
     $previousDisplay = if ($null -eq $previous) { '(unset)' } else { $previous }
