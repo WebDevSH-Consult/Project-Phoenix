@@ -5,7 +5,7 @@
     Author            = 'Project Phoenix'
     Description       = 'System validation engine (EPIC-04): hardware-agnostic PASS/WARN/FAIL checks. Requires PhoenixLogging to be imported first; imports HardwareDetection itself.'
     PowerShellVersion = '7.0'
-    FunctionsToExport = @('Test-PhoenixGpu', 'Test-PhoenixCommandAvailable', 'Test-PhoenixAppxPackageAvailable', 'Test-PhoenixPathExists', 'Test-PhoenixWinGetPackageInstalled', 'Invoke-PhoenixValidationReport', 'Get-ValidationModuleDefinition')
+    FunctionsToExport = @('Test-PhoenixGpu', 'Test-PhoenixCommandAvailable', 'Test-PhoenixAppxPackageAvailable', 'Test-PhoenixPathExists', 'Test-PhoenixWinGetPackageInstalled', 'Test-PhoenixPendingReboot', 'Test-PhoenixPendingFileOperations', 'Test-PhoenixActiveInstaller', 'Get-PhoenixPreflightState', 'Invoke-PhoenixValidationReport', 'Get-ValidationModuleDefinition')
     CmdletsToExport   = @()
     VariablesToExport = @()
     AliasesToExport   = @()
