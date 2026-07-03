@@ -45,6 +45,13 @@ try {
     $phoenixVersion = Get-PhoenixVersion -RootPath $root
     Write-PhoenixLog -Level INFO -Message "Project Phoenix v$($phoenixVersion.Version) starting... (config version: $($config.version))"
 
+    if (Test-PhoenixElevated) {
+        Write-PhoenixLog -Level INFO -Message 'Running elevated: machine-scope settings will be applied.'
+    }
+    else {
+        Write-PhoenixLog -Level WARNING -Message 'Running without elevation: machine-scope settings (RequiresElevation) will be skipped with a WARN. Re-run from an elevated PowerShell to apply them.'
+    }
+
     $started = Get-Date
     $results = Invoke-PhoenixOrchestration -RootPath $root
     $duration = ((Get-Date) - $started).TotalSeconds

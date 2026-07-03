@@ -205,3 +205,70 @@ Describe 'Get-WindowsConfigModuleDefinition' {
         $health.Status | Should -Be 'Healthy'
     }
 }
+
+Describe 'Elevation gate (ADR 0013)' {
+    BeforeAll {
+        Import-Module "$PSScriptRoot/../modules/PhoenixLogging/PhoenixLogging.psd1" -Force
+        Import-Module "$PSScriptRoot/../modules/WindowsConfig/WindowsConfig.psd1" -Force
+        Initialize-PhoenixLog -LogDirectory (Join-Path $TestDrive 'logs')
+
+        $script:ElevatedManifest = [PSCustomObject]@{
+            Name              = 'Machine setting'
+            Type              = 'Registry'
+            ConfigFlag        = 'windows.Machine'
+            Path              = 'HKLM:\SOFTWARE\PhoenixTest'
+            ValueName         = 'V'
+            DesiredValue      = 1
+            ValueKind         = 'DWord'
+            RequiresElevation = $true
+        }
+    }
+
+    It 'parses RequiresElevation from a manifest, defaulting to false' {
+        $withFlag = '{"Name":"M","Type":"Registry","ConfigFlag":"windows.M","Path":"HKLM:\\SOFTWARE\\T","ValueName":"V","DesiredValue":1,"ValueKind":"DWord","RequiresElevation":true}'
+        $withoutFlag = '{"Name":"U","Type":"Registry","ConfigFlag":"windows.U","Path":"HKCU:\\Software\\T","ValueName":"V","DesiredValue":1,"ValueKind":"DWord"}'
+        $path = Join-Path $TestDrive ([guid]::NewGuid())
+        New-Item -ItemType Directory -Path $path -Force | Out-Null
+        Set-Content -Path (Join-Path $path 'm.json') -Value $withFlag
+        Set-Content -Path (Join-Path $path 'u.json') -Value $withoutFlag
+
+        $manifests = Get-PhoenixSettingManifest -ManifestsPath $path
+
+        ($manifests | Where-Object Name -eq 'M').RequiresElevation | Should -Be $true
+        ($manifests | Where-Object Name -eq 'U').RequiresElevation | Should -Be $false
+    }
+
+    It 'skips with WARN, never writing, when elevation is required but absent and a change is needed' {
+        Mock -ModuleName WindowsConfig Get-PhoenixRegistryValue { 0 }
+        Mock -ModuleName WindowsConfig Set-PhoenixRegistryValue { throw 'should not be called' }
+        Mock -ModuleName WindowsConfig Test-PhoenixElevated { $false }
+
+        $result = Set-PhoenixSetting -Manifest $script:ElevatedManifest
+
+        $result.Status | Should -Be 'WARN'
+        $result.Message | Should -Match 'elevation'
+        Should -Invoke -ModuleName WindowsConfig Set-PhoenixRegistryValue -Times 0
+    }
+
+    It 'still reports PASS without elevation when the machine-scope setting is already in the desired state' {
+        Mock -ModuleName WindowsConfig Get-PhoenixRegistryValue { 1 }
+        Mock -ModuleName WindowsConfig Test-PhoenixElevated { $false }
+
+        $result = Set-PhoenixSetting -Manifest $script:ElevatedManifest
+
+        $result.Status | Should -Be 'PASS'
+        $result.Message | Should -Match 'Already in desired state'
+    }
+
+    It 'applies normally when elevated' {
+        $script:HklmState = 0
+        Mock -ModuleName WindowsConfig Get-PhoenixRegistryValue { $script:HklmState }
+        Mock -ModuleName WindowsConfig Set-PhoenixRegistryValue { $script:HklmState = 1 }
+        Mock -ModuleName WindowsConfig Test-PhoenixElevated { $true }
+
+        $result = Set-PhoenixSetting -Manifest $script:ElevatedManifest
+
+        $result.Status | Should -Be 'PASS'
+        Should -Invoke -ModuleName WindowsConfig Set-PhoenixRegistryValue -Times 1
+    }
+}

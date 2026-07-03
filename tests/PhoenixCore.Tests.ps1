@@ -90,3 +90,10 @@ Describe 'Get-PhoenixVersion' {
         { Get-PhoenixVersion -RootPath $root } | Should -Throw '*VERSION*'
     }
 }
+
+Describe 'Test-PhoenixElevated' {
+    It 'returns a boolean without throwing' {
+        $result = Test-PhoenixElevated
+        $result | Should -BeOfType [bool]
+    }
+}

@@ -16,15 +16,15 @@ Workstation provisioning build-out (Roadmap 0.1–0.9 complete, working toward 1
 - Roadmap 0.9 Health Dashboard: `modules/Dashboard` — every `Bootstrap.ps1` run ends with a timestamped HTML + JSON deployment report under `reports/` (machine metadata, Phoenix version, git commit, GPU summary, duration, per-module health, per-item details, failure/warning counts). Enabled by a new optional `GetDetails` channel in `PhoenixCore` that Installer/WindowsConfig/Validation opt into. ADR [0010](docs/adr/0010-health-dashboard-reporting.md).
 - Hardware Detection Engine: `modules/HardwareDetection` (`Get-PhoenixHardware`) — CPU/GPU/RAM/form-factor/VM/motherboard/OS/TPM/SecureBoot/disks/network as one detected-never-assumed object; orchestrated at `RunOrder: 20` and consumable by any module. GPU detection relocated here from Validation. Deployment reports now carry the full hardware summary. ADR [0011](docs/adr/0011-hardware-detection-engine.md).
 - Installer Preflight safety gate: preflight checks in `modules/Validation` (`Get-PhoenixPreflightState` — pending reboot, `PendingFileRenameOperations`, active MSI session), gating `Install-PhoenixApplications` and `Invoke-PhoenixProfile` (nothing installs on `FAIL`; `-SkipPreflight` escape hatch). Validated against the live machine: it caught 21 real pending file operations including the AMD Adrenalin installer — the exact Error 206 scenario it was built to prevent. ADR [0012](docs/adr/0012-installer-preflight-gate.md).
+- Elevation strategy: detect-and-declare, never auto-elevate (`Test-PhoenixElevated` in PhoenixCore; `RequiresElevation` manifest field; WARN-skip with "re-run elevated" when rights are missing; idempotent PASS still works non-elevated since reads need no rights). First machine-scope setting shipped: telemetry minimization — `windows.DisableTelemetry` finally live. ADR [0013](docs/adr/0013-elevation-strategy.md).
 
 ## Current Task
 - None in progress — awaiting next task selection
 
 ## Next Planned Task
 - Toward v1.0, in agreed order:
-  1. Elevation strategy ADR + HKLM settings (unblocks `DisableTelemetry`, Windows Features, services)
-  2. Installer completeness: dry-run mode, WinGet upgrade/uninstall
-  3. Advanced validation + self-healing slices, then v1.0 release
+  1. Installer completeness: dry-run mode, WinGet upgrade/uninstall
+  2. Advanced validation + self-healing slices, then v1.0 release
 - Also pending: decide EPIC numbering for a "Hardware Awareness" epic doc (EPIC-05 was informally used for the Application Deployment Platform; suggest EPIC-06)
 
 ## Repository Health
@@ -45,9 +45,9 @@ Workstation provisioning build-out (Roadmap 0.1–0.9 complete, working toward 1
 ## Current Repository Metrics
 
 Modules: 10
-Tests: 132
+Tests: 137
 PowerShell Files: 31
-Markdown Documents: 45
+Markdown Documents: 46
 GitHub Workflows: 1
 CI Status: Passing
 Open Issues: 0
