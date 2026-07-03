@@ -262,7 +262,10 @@ function Get-ValidationModuleDefinition {
 
     return @{
         Name       = 'Validation'
-        Initialize = { Write-PhoenixLog -Level INFO -Message '[Validation] Preparing to run system checks.' }
+        Initialize = {
+            $script:PhoenixValidationResults = @()
+            Write-PhoenixLog -Level INFO -Message '[Validation] Preparing to run system checks.'
+        }
         Validate   = { $true }
         Execute    = {
             $script:PhoenixValidationResults = Invoke-PhoenixValidationReport
@@ -270,6 +273,7 @@ function Get-ValidationModuleDefinition {
         Verify     = {
             -not (@($script:PhoenixValidationResults) | Where-Object Status -eq 'FAIL')
         }
+        GetDetails = { $script:PhoenixValidationResults }
     }
 }
 

@@ -522,6 +522,7 @@ function Get-InstallerModuleDefinition {
     return @{
         Name       = 'Installer'
         Initialize = {
+            $script:PhoenixInstallResults = @()
             Import-Module (Join-Path $PSScriptRoot '..\Validation\Validation.psd1') -Force
             Write-PhoenixLog -Level INFO -Message '[Installer] Preparing application deployment engine.'
         }
@@ -539,6 +540,7 @@ function Get-InstallerModuleDefinition {
         Verify     = {
             -not (@($script:PhoenixInstallResults) | Where-Object Status -eq 'FAIL')
         }
+        GetDetails = { $script:PhoenixInstallResults }
     }
 }
 
