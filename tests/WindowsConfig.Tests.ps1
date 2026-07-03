@@ -225,8 +225,8 @@ Describe 'Elevation gate (ADR 0013)' {
     }
 
     It 'parses RequiresElevation from a manifest, defaulting to false' {
-        $withFlag = '{"Name":"M","Type":"Registry","ConfigFlag":"windows.M","Path":"HKLM:\SOFTWARE\T","ValueName":"V","DesiredValue":1,"ValueKind":"DWord","RequiresElevation":true}'
-        $withoutFlag = '{"Name":"U","Type":"Registry","ConfigFlag":"windows.U","Path":"HKCU:\Software\T","ValueName":"V","DesiredValue":1,"ValueKind":"DWord"}'
+        $withFlag = '{"Name":"M","Type":"Registry","ConfigFlag":"windows.M","Path":"HKLM:\\SOFTWARE\\T","ValueName":"V","DesiredValue":1,"ValueKind":"DWord","RequiresElevation":true}'
+        $withoutFlag = '{"Name":"U","Type":"Registry","ConfigFlag":"windows.U","Path":"HKCU:\\Software\\T","ValueName":"V","DesiredValue":1,"ValueKind":"DWord"}'
         $path = Join-Path $TestDrive ([guid]::NewGuid())
         New-Item -ItemType Directory -Path $path -Force | Out-Null
         Set-Content -Path (Join-Path $path 'm.json') -Value $withFlag
