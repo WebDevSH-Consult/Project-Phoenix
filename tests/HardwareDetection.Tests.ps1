@@ -41,7 +41,10 @@ Describe 'Get-PhoenixHardware' {
         function New-CimFixture {
             param([string]$Manufacturer = 'Micro-Star International', [string]$Model = 'MS-7D75', [int[]]$ChassisTypes = @(3))
 
-            Mock -ModuleName HardwareDetection Get-PhoenixCimInstance {
+            # GetNewClosure captures this function's parameters into the mock
+            # body - a Pester module mock executes in the module's scope later,
+            # where these locals would otherwise not exist.
+            $mockBody = {
                 param($ClassName)
                 switch ($ClassName) {
                     'Win32_Processor' { @([PSCustomObject]@{ Name = 'AMD Ryzen 7 7800X3D'; Manufacturer = 'AuthenticAMD'; NumberOfCores = 8; NumberOfLogicalProcessors = 16 }) }
@@ -54,7 +57,9 @@ Describe 'Get-PhoenixHardware' {
                     'Win32_NetworkAdapter' { @([PSCustomObject]@{ Name = 'Realtek Gaming 2.5GbE'; NetEnabled = $true }, [PSCustomObject]@{ Name = 'Bluetooth PAN'; NetEnabled = $false }) }
                     default { @() }
                 }
-            }
+            }.GetNewClosure()
+
+            Mock -ModuleName HardwareDetection Get-PhoenixCimInstance $mockBody
             Mock -ModuleName HardwareDetection Get-PhoenixTpmState { 'Present' }
             Mock -ModuleName HardwareDetection Get-PhoenixSecureBootState { 'Enabled' }
         }
