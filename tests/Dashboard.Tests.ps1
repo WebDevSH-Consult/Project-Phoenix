@@ -26,8 +26,15 @@ Describe 'New-PhoenixDeploymentReport' {
         Import-Module "$PSScriptRoot/../modules/Dashboard/Dashboard.psd1" -Force
         Initialize-PhoenixLog -LogDirectory (Join-Path $TestDrive 'logs')
 
-        Mock -ModuleName Dashboard Get-PhoenixGpuInfo {
-            @([PSCustomObject]@{ Name = 'Fixture GPU'; Vendor = 'AMD' })
+        Mock -ModuleName Dashboard Get-PhoenixHardware {
+            [PSCustomObject]@{
+                Cpu        = [PSCustomObject]@{ Name = 'Fixture CPU'; Vendor = 'AMD'; Cores = 8; LogicalProcessors = 16 }
+                Gpus       = @([PSCustomObject]@{ Name = 'Fixture GPU'; Vendor = 'AMD' })
+                MemoryGB   = 32
+                System     = [PSCustomObject]@{ Manufacturer = 'Fixture'; Model = 'Test'; FormFactor = 'Desktop'; IsVirtualMachine = $false }
+                Tpm        = 'Present'
+                SecureBoot = 'Enabled'
+            }
         }
         Mock -ModuleName Dashboard Get-PhoenixGitCommit { 'abc1234' }
 

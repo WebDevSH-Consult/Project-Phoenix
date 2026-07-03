@@ -1,4 +1,4 @@
-Describe 'Get-PhoenixGpuInfo / Test-PhoenixGpu' {
+Describe 'Test-PhoenixGpu' {
     BeforeAll {
         Import-Module "$PSScriptRoot/../modules/PhoenixLogging/PhoenixLogging.psd1" -Force
         Import-Module "$PSScriptRoot/../modules/Validation/Validation.psd1" -Force
@@ -6,8 +6,8 @@ Describe 'Get-PhoenixGpuInfo / Test-PhoenixGpu' {
     }
 
     It 'reports PASS and the correct vendor for an AMD adapter, without assuming AMD' {
-        Mock -ModuleName Validation Get-CimInstance {
-            [PSCustomObject]@{ Name = 'AMD Radeon RX 7900 XT' }
+        Mock -ModuleName Validation Get-PhoenixGpuInfo {
+            @([PSCustomObject]@{ Name = 'AMD Radeon RX 7900 XT'; Vendor = 'AMD' })
         }
 
         $result = Test-PhoenixGpu
@@ -17,8 +17,8 @@ Describe 'Get-PhoenixGpuInfo / Test-PhoenixGpu' {
     }
 
     It 'reports PASS and the correct vendor for an NVIDIA adapter, without assuming NVIDIA' {
-        Mock -ModuleName Validation Get-CimInstance {
-            [PSCustomObject]@{ Name = 'NVIDIA GeForce RTX 4080' }
+        Mock -ModuleName Validation Get-PhoenixGpuInfo {
+            @([PSCustomObject]@{ Name = 'NVIDIA GeForce RTX 4080'; Vendor = 'NVIDIA' })
         }
 
         $result = Test-PhoenixGpu
@@ -28,8 +28,8 @@ Describe 'Get-PhoenixGpuInfo / Test-PhoenixGpu' {
     }
 
     It 'reports WARN, not an error, for an unrecognised adapter vendor' {
-        Mock -ModuleName Validation Get-CimInstance {
-            [PSCustomObject]@{ Name = 'Some Unbranded Display Adapter' }
+        Mock -ModuleName Validation Get-PhoenixGpuInfo {
+            @([PSCustomObject]@{ Name = 'Some Unbranded Display Adapter'; Vendor = 'Unknown' })
         }
 
         $result = Test-PhoenixGpu
@@ -38,7 +38,7 @@ Describe 'Get-PhoenixGpuInfo / Test-PhoenixGpu' {
     }
 
     It 'reports FAIL when no GPU is detected at all' {
-        Mock -ModuleName Validation Get-CimInstance { }
+        Mock -ModuleName Validation Get-PhoenixGpuInfo { @() }
 
         $result = Test-PhoenixGpu
 
