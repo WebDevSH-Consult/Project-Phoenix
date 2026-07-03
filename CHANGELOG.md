@@ -5,6 +5,12 @@ All notable changes to this project are documented in this file. Format follows 
 ## [Unreleased]
 
 ### Added
+- `modules/HardwareDetection`: the Hardware Detection Engine (ADR [0011](docs/adr/0011-hardware-detection-engine.md)). `Get-PhoenixHardware` returns one authoritative object — CPU (name/vendor/cores), GPUs, memory, system form factor (laptop/desktop), virtual-machine detection, motherboard, OS, TPM state, Secure Boot state, disks, network adapters — detected via mockable CIM wrappers, never assumed; inaccessible states report `Unknown`. Orchestrated at `RunOrder: 20` (detect before configuring/installing) with detection results surfaced into the deployment report, and consumable directly by any module.
+- Deployment reports now carry the full hardware summary (CPU, memory, system, TPM, Secure Boot) instead of GPUs only.
+- Pester tests covering vendor identification (AMD/NVIDIA/Intel/Unknown for both CPU and GPU), laptop chassis classification, VM detection, graceful degradation when CIM returns nothing, a real-machine integration sanity check, and the orchestrated lifecycle.
+
+### Changed
+- `Get-PhoenixGpuInfo` moved from `modules/Validation` to `modules/HardwareDetection`, its canonical home — detection is a hardware concern; Validation's `Test-PhoenixGpu` (the *check*) now consumes it. `Dashboard` imports `HardwareDetection` instead of `Validation`.
 - `modules/Dashboard`: the Health Dashboard (Roadmap 0.9). Every `Bootstrap.ps1` run now ends with a timestamped HTML + JSON deployment report under `reports/` (gitignored, like `logs/`): machine metadata, Phoenix version, git commit, GPU summary, run duration, per-module health, per-item details, and derived failure/warning counts. Engine module called by `Bootstrap.ps1` after orchestration — not orchestrated itself, since the report summarizes results that only exist once orchestration finishes. See ADR [0010](docs/adr/0010-health-dashboard-reporting.md).
 - `modules/PhoenixCore`: `Invoke-PhoenixModuleLifecycle` gained an optional `GetDetails` scriptblock — modules surface per-item results (installs, settings with previous values, validation checks) onto the health object's new `Details` property. Purely additive; a `GetDetails` failure degrades to a logged warning, never a module failure. Installer, WindowsConfig, and Validation opt in.
 - Pester tests covering the `Details` channel (attach, absent, throwing) and report generation (file output, JSON round-trip, failure/warning counting, HTML rendering with untrusted-text encoding).
