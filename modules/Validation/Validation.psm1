@@ -6,8 +6,11 @@
     vendor or software is present. See docs/roadmap/EPIC-04-System-Validation.md
     and the "Validation First" standard in CONTRIBUTING.md.
 
-    Depends on PhoenixLogging being imported first (for Write-PhoenixLog).
+    Depends on PhoenixLogging being imported first (for Write-PhoenixLog);
+    imports HardwareDetection itself (for Get-PhoenixGpuInfo).
 #>
+
+Import-Module (Join-Path $PSScriptRoot '..\HardwareDetection\HardwareDetection.psd1')
 
 function New-PhoenixValidationResult {
     <#
@@ -44,37 +47,6 @@ function New-PhoenixValidationResult {
         Status   = $Status
         Message  = $Message
     }
-}
-
-function Get-PhoenixGpuInfo {
-    <#
-        .SYNOPSIS
-        Detects installed GPUs without assuming any particular vendor.
-
-        .DESCRIPTION
-        Wraps Get-CimInstance Win32_VideoController so it can be mocked in
-        tests. Vendor is inferred from the adapter name; an adapter that
-        doesn't match a known pattern is reported as Unknown rather than
-        guessed at - Phoenix never assumes AMD or NVIDIA hardware.
-    #>
-    [CmdletBinding()]
-    [OutputType([PSCustomObject[]])]
-    param()
-
-    $adapters = Get-CimInstance -ClassName Win32_VideoController -ErrorAction SilentlyContinue
-
-    return @($adapters | ForEach-Object {
-        $vendor = switch -Regex ($_.Name) {
-            'AMD|Radeon' { 'AMD'; break }
-            'NVIDIA|GeForce|Quadro' { 'NVIDIA'; break }
-            'Intel' { 'Intel'; break }
-            default { 'Unknown' }
-        }
-        [PSCustomObject]@{
-            Name   = $_.Name
-            Vendor = $vendor
-        }
-    })
 }
 
 function Test-PhoenixGpu {
@@ -277,4 +249,4 @@ function Get-ValidationModuleDefinition {
     }
 }
 
-Export-ModuleMember -Function Get-PhoenixGpuInfo, Test-PhoenixGpu, Test-PhoenixCommandAvailable, Test-PhoenixAppxPackageAvailable, Test-PhoenixPathExists, Test-PhoenixWinGetPackageInstalled, Invoke-PhoenixValidationReport, Get-ValidationModuleDefinition
+Export-ModuleMember -Function Test-PhoenixGpu, Test-PhoenixCommandAvailable, Test-PhoenixAppxPackageAvailable, Test-PhoenixPathExists, Test-PhoenixWinGetPackageInstalled, Invoke-PhoenixValidationReport, Get-ValidationModuleDefinition
