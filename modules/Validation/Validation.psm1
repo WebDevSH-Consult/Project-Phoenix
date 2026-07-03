@@ -198,6 +198,173 @@ function Test-PhoenixWinGetPackageInstalled {
     return New-PhoenixValidationResult -Category 'Applications' -Name $DisplayName -Status 'WARN' -Message "WinGet does not report '$PackageId' as installed. This may be expected depending on workstation profile."
 }
 
+#region Installer preflight (ADR 0012) - "no system-level installation runs
+#        on a non-idle Windows servicing state"
+
+function Test-PhoenixPreflightRegistryKey {
+    <#
+        .SYNOPSIS
+        Thin, mockable wrapper: does a registry key exist? (HKLM reads need
+        no elevation.)
+    #>
+    [CmdletBinding()]
+    [OutputType([bool])]
+    param(
+        [Parameter(Mandatory)]
+        [string]$Path
+    )
+
+    return [bool](Test-Path -LiteralPath $Path)
+}
+
+function Get-PhoenixPreflightRegistryValue {
+    <#
+        .SYNOPSIS
+        Thin, mockable wrapper: read a registry value, $null if absent.
+    #>
+    [CmdletBinding()]
+    [OutputType([object])]
+    param(
+        [Parameter(Mandatory)]
+        [string]$Path,
+
+        [Parameter(Mandatory)]
+        [string]$ValueName
+    )
+
+    try {
+        return (Get-ItemProperty -Path $Path -Name $ValueName -ErrorAction Stop).$ValueName
+    }
+    catch {
+        return $null
+    }
+}
+
+function Test-PhoenixMsiMutexHeld {
+    <#
+        .SYNOPSIS
+        Thin, mockable wrapper: is the global MSI installer mutex held?
+
+        .DESCRIPTION
+        Windows Installer holds Global\_MSIExecute for the duration of any
+        MSI install. Openable = an install is in progress. Access denied
+        also means it exists (held by another session) - reported as held,
+        never assumed idle.
+    #>
+    [CmdletBinding()]
+    [OutputType([bool])]
+    param()
+
+    try {
+        $mutex = [System.Threading.Mutex]::OpenExisting('Global\_MSIExecute')
+        $mutex.Dispose()
+        return $true
+    }
+    catch [System.Threading.WaitHandleCannotBeOpenedException] {
+        return $false
+    }
+    catch [System.UnauthorizedAccessException] {
+        return $true
+    }
+    catch {
+        return $false
+    }
+}
+
+function Test-PhoenixPendingReboot {
+    <#
+        .SYNOPSIS
+        FAILs when Windows has a pending reboot (Component Based Servicing
+        or Windows Update) - a state in which system-level installs are
+        unsafe.
+    #>
+    [CmdletBinding()]
+    [OutputType([PSCustomObject])]
+    param()
+
+    $signals = @()
+    if (Test-PhoenixPreflightRegistryKey -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Component Based Servicing\RebootPending') {
+        $signals += 'Component Based Servicing'
+    }
+    if (Test-PhoenixPreflightRegistryKey -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\WindowsUpdate\Auto Update\RebootRequired') {
+        $signals += 'Windows Update'
+    }
+
+    if ($signals.Count -gt 0) {
+        return New-PhoenixValidationResult -Category 'InstallerPreflight' -Name 'Pending reboot' -Status 'FAIL' -Message "Reboot pending ($($signals -join ', ')). Restart the system before continuing."
+    }
+
+    return New-PhoenixValidationResult -Category 'InstallerPreflight' -Name 'Pending reboot' -Status 'PASS' -Message 'No pending reboot detected.'
+}
+
+function Test-PhoenixPendingFileOperations {
+    <#
+        .SYNOPSIS
+        FAILs when PendingFileRenameOperations is non-empty - Windows will
+        replace or delete files at next boot, and installers (notably GPU
+        drivers, per the AMD Error 206 failure class) can break against
+        that state.
+    #>
+    [CmdletBinding()]
+    [OutputType([PSCustomObject])]
+    param()
+
+    $pending = Get-PhoenixPreflightRegistryValue -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager' -ValueName 'PendingFileRenameOperations'
+    $entries = @($pending | Where-Object { $_ })
+
+    if ($entries.Count -eq 0) {
+        return New-PhoenixValidationResult -Category 'InstallerPreflight' -Name 'Pending file operations' -Status 'PASS' -Message 'No pending file rename operations.'
+    }
+
+    $components = @($entries | ForEach-Object { Split-Path -Leaf ($_ -replace '^\\\?\?\\', '') } | Where-Object { $_ } | Select-Object -Unique -First 3)
+    return New-PhoenixValidationResult -Category 'InstallerPreflight' -Name 'Pending file operations' -Status 'FAIL' -Message "$($entries.Count) pending file operation(s) detected (e.g. $($components -join ', ')). Restart the system before continuing."
+}
+
+function Test-PhoenixActiveInstaller {
+    <#
+        .SYNOPSIS
+        FAILs when another Windows Installer session is already running.
+    #>
+    [CmdletBinding()]
+    [OutputType([PSCustomObject])]
+    param()
+
+    if (Test-PhoenixMsiMutexHeld) {
+        return New-PhoenixValidationResult -Category 'InstallerPreflight' -Name 'Active installer' -Status 'FAIL' -Message 'Another installation is in progress (MSI mutex held). Wait for it to finish before continuing.'
+    }
+
+    return New-PhoenixValidationResult -Category 'InstallerPreflight' -Name 'Active installer' -Status 'PASS' -Message 'No other installation in progress.'
+}
+
+function Get-PhoenixPreflightState {
+    <#
+        .SYNOPSIS
+        Runs every installer-preflight check and reports whether the system
+        is in a safe state for system-level installation.
+
+        .DESCRIPTION
+        Consumed by Install-PhoenixApplications and Invoke-PhoenixProfile
+        before anything installs. See ADR 0012: the rule is universal -
+        WinGet, MSI, EXE, and drivers alike.
+    #>
+    [CmdletBinding()]
+    [OutputType([PSCustomObject])]
+    param()
+
+    $results = @(
+        Test-PhoenixPendingReboot
+        Test-PhoenixPendingFileOperations
+        Test-PhoenixActiveInstaller
+    )
+
+    return [PSCustomObject]@{
+        Safe    = -not ($results | Where-Object Status -eq 'FAIL')
+        Results = $results
+    }
+}
+
+#endregion
+
 function Invoke-PhoenixValidationReport {
     <#
         .SYNOPSIS
@@ -249,4 +416,4 @@ function Get-ValidationModuleDefinition {
     }
 }
 
-Export-ModuleMember -Function Test-PhoenixGpu, Test-PhoenixCommandAvailable, Test-PhoenixAppxPackageAvailable, Test-PhoenixPathExists, Test-PhoenixWinGetPackageInstalled, Invoke-PhoenixValidationReport, Get-ValidationModuleDefinition
+Export-ModuleMember -Function Test-PhoenixGpu, Test-PhoenixCommandAvailable, Test-PhoenixAppxPackageAvailable, Test-PhoenixPathExists, Test-PhoenixWinGetPackageInstalled, Test-PhoenixPendingReboot, Test-PhoenixPendingFileOperations, Test-PhoenixActiveInstaller, Get-PhoenixPreflightState, Invoke-PhoenixValidationReport, Get-ValidationModuleDefinition

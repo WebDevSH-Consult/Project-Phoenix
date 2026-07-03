@@ -43,6 +43,10 @@ Each probe is `{ "Type": ..., "Value": ... }`, dispatched to the matching functi
 
 Bare filename strings (e.g. `"EpicGamesLauncher.exe"`) are deliberately **not** supported — a bare name doesn't say whether to check PATH, a file path, or a package listing, and guessing would violate the "never assume" standard in [CONTRIBUTING.md](../../CONTRIBUTING.md#validation-first).
 
+## Preflight safety gate (ADR 0012)
+
+Before installing anything, `Install-PhoenixApplications` and `Invoke-PhoenixProfile` run [Validation's installer preflight](../Validation/README.md#installer-preflight-adr-0012): pending reboot, pending file operations, active installer session. On `FAIL` they install **nothing** and return the failing preflight results (which flow into the deployment report with a clear recommended action — usually "restart first"). `-SkipPreflight` is the explicit operator escape hatch. The rule is universal: no system-level installation runs on a non-idle Windows servicing state.
+
 ## Install flow
 
 `Install-PhoenixApplication`, per application:

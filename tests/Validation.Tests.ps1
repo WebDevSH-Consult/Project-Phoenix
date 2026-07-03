@@ -177,3 +177,92 @@ Describe 'Get-ValidationModuleDefinition' {
         $health.Status | Should -Be 'Healthy'
     }
 }
+
+Describe 'Installer preflight (ADR 0012)' {
+    BeforeAll {
+        Import-Module "$PSScriptRoot/../modules/PhoenixLogging/PhoenixLogging.psd1" -Force
+        Import-Module "$PSScriptRoot/../modules/Validation/Validation.psd1" -Force
+        Initialize-PhoenixLog -LogDirectory (Join-Path $TestDrive 'logs')
+    }
+
+    It 'Test-PhoenixPendingReboot FAILs when Component Based Servicing signals a reboot' {
+        Mock -ModuleName Validation Test-PhoenixPreflightRegistryKey {
+            param($Path)
+            return ($Path -match 'Component Based Servicing')
+        }
+
+        $result = Test-PhoenixPendingReboot
+
+        $result.Status | Should -Be 'FAIL'
+        $result.Message | Should -Match 'Component Based Servicing'
+        $result.Message | Should -Match 'Restart'
+    }
+
+    It 'Test-PhoenixPendingReboot FAILs when Windows Update signals a reboot' {
+        Mock -ModuleName Validation Test-PhoenixPreflightRegistryKey {
+            param($Path)
+            return ($Path -match 'RebootRequired')
+        }
+
+        (Test-PhoenixPendingReboot).Status | Should -Be 'FAIL'
+    }
+
+    It 'Test-PhoenixPendingReboot PASSes when neither signal is present' {
+        Mock -ModuleName Validation Test-PhoenixPreflightRegistryKey { $false }
+
+        (Test-PhoenixPendingReboot).Status | Should -Be 'PASS'
+    }
+
+    It 'Test-PhoenixPendingFileOperations FAILs with count and components when operations are pending' {
+        Mock -ModuleName Validation Get-PhoenixPreflightRegistryValue {
+            @('\??\C:\Program Files\OneDrive\old.dll', '', '\??\C:\Windows\Temp\chrome_update.exe', '')
+        }
+
+        $result = Test-PhoenixPendingFileOperations
+
+        $result.Status | Should -Be 'FAIL'
+        $result.Message | Should -Match '2 pending'
+        $result.Message | Should -Match 'old.dll'
+        $result.Message | Should -Match 'Restart'
+    }
+
+    It 'Test-PhoenixPendingFileOperations PASSes when the value is absent' {
+        Mock -ModuleName Validation Get-PhoenixPreflightRegistryValue { $null }
+
+        (Test-PhoenixPendingFileOperations).Status | Should -Be 'PASS'
+    }
+
+    It 'Test-PhoenixActiveInstaller FAILs when the MSI mutex is held' {
+        Mock -ModuleName Validation Test-PhoenixMsiMutexHeld { $true }
+
+        $result = Test-PhoenixActiveInstaller
+
+        $result.Status | Should -Be 'FAIL'
+        $result.Message | Should -Match 'in progress'
+    }
+
+    It 'Test-PhoenixActiveInstaller PASSes when no installer is running' {
+        Mock -ModuleName Validation Test-PhoenixMsiMutexHeld { $false }
+
+        (Test-PhoenixActiveInstaller).Status | Should -Be 'PASS'
+    }
+
+    It 'Get-PhoenixPreflightState is Safe only when every check passes' {
+        Mock -ModuleName Validation Test-PhoenixPreflightRegistryKey { $false }
+        Mock -ModuleName Validation Get-PhoenixPreflightRegistryValue { $null }
+        Mock -ModuleName Validation Test-PhoenixMsiMutexHeld { $false }
+
+        $state = Get-PhoenixPreflightState
+
+        $state.Safe | Should -Be $true
+        @($state.Results).Count | Should -Be 3
+    }
+
+    It 'Get-PhoenixPreflightState is unsafe when any check fails' {
+        Mock -ModuleName Validation Test-PhoenixPreflightRegistryKey { $false }
+        Mock -ModuleName Validation Get-PhoenixPreflightRegistryValue { @('\??\C:\pending.dll') }
+        Mock -ModuleName Validation Test-PhoenixMsiMutexHeld { $false }
+
+        (Get-PhoenixPreflightState).Safe | Should -Be $false
+    }
+}

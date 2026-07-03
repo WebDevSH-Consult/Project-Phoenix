@@ -12,6 +12,7 @@
 #>
 
 Import-Module (Join-Path $PSScriptRoot '..\PhoenixConfig\PhoenixConfig.psd1')
+Import-Module (Join-Path $PSScriptRoot '..\Validation\Validation.psd1')
 
 #region Backends - thin, mockable wrappers around the actual install invocation
 
@@ -305,8 +306,21 @@ function Install-PhoenixApplications {
         [PSCustomObject[]]$Manifests,
 
         [Parameter(Mandatory)]
-        [PSCustomObject]$Configuration
+        [PSCustomObject]$Configuration,
+
+        # Escape hatch for the preflight safety gate (ADR 0012). Off by
+        # default: no system-level installation runs on a non-idle Windows
+        # servicing state.
+        [switch]$SkipPreflight
     )
+
+    if (-not $SkipPreflight) {
+        $preflight = Get-PhoenixPreflightState
+        if (-not $preflight.Safe) {
+            Write-PhoenixLog -Level ERROR -Message '[Installer] Preflight failed - system is not in a safe state for installation. Nothing will be installed.'
+            return @($preflight.Results | Where-Object Status -eq 'FAIL')
+        }
+    }
 
     $enabled = @($Manifests | Where-Object { Get-PhoenixConfigValue -Configuration $Configuration -Path $_.ConfigFlag })
     Write-PhoenixLog -Level INFO -Message "[Installer] $($Manifests.Count) application manifest(s) discovered; $($enabled.Count) enabled by configuration."
@@ -471,7 +485,12 @@ function Invoke-PhoenixProfile {
 
         [string]$RootPath,
 
-        [int]$MaxAttempts = 2
+        [int]$MaxAttempts = 2,
+
+        # Escape hatch for the preflight safety gate (ADR 0012). Off by
+        # default: no system-level installation runs on a non-idle Windows
+        # servicing state.
+        [switch]$SkipPreflight
     )
 
     Import-Module (Join-Path $PSScriptRoot '..\Validation\Validation.psd1') -Force
@@ -479,6 +498,14 @@ function Invoke-PhoenixProfile {
 
     if (-not $RootPath) {
         $RootPath = Resolve-Path (Join-Path $PSScriptRoot '..\..')
+    }
+
+    if (-not $SkipPreflight) {
+        $preflight = Get-PhoenixPreflightState
+        if (-not $preflight.Safe) {
+            Write-PhoenixLog -Level ERROR -Message "[Installer] Preflight failed - system is not in a safe state for installation. Profile '$ProfileName' will not be applied."
+            return @($preflight.Results | Where-Object Status -eq 'FAIL')
+        }
     }
 
     $workstationProfile = Get-PhoenixProfile -ProfilesPath (Join-Path $RootPath 'profiles') -ProfileName $ProfileName
