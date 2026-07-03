@@ -37,6 +37,7 @@ try {
     Import-Module (Join-Path $root 'modules/PhoenixCore/PhoenixCore.psd1') -Force
     Import-Module (Join-Path $root 'modules/PhoenixConfig/PhoenixConfig.psd1') -Force
     Import-Module (Join-Path $root 'modules/PhoenixBootstrap/PhoenixBootstrap.psd1') -Force
+    Import-Module (Join-Path $root 'modules/Dashboard/Dashboard.psd1') -Force
 
     Initialize-PhoenixLog -LogDirectory (Join-Path $root 'logs')
 
@@ -44,7 +45,11 @@ try {
     $phoenixVersion = Get-PhoenixVersion -RootPath $root
     Write-PhoenixLog -Level INFO -Message "Project Phoenix v$($phoenixVersion.Version) starting... (config version: $($config.version))"
 
-    $null = Invoke-PhoenixOrchestration -RootPath $root
+    $started = Get-Date
+    $results = Invoke-PhoenixOrchestration -RootPath $root
+    $duration = ((Get-Date) - $started).TotalSeconds
+
+    $null = New-PhoenixDeploymentReport -ModuleHealth $results -RootPath $root -DurationSeconds $duration
 
     Write-PhoenixLog -Level SUCCESS -Message 'Bootstrap complete.'
 }

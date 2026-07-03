@@ -249,7 +249,10 @@ function Get-WindowsConfigModuleDefinition {
 
     return @{
         Name       = 'WindowsConfig'
-        Initialize = { Write-PhoenixLog -Level INFO -Message '[WindowsConfig] Preparing Windows configuration engine.' }
+        Initialize = {
+            $script:PhoenixSettingResults = @()
+            Write-PhoenixLog -Level INFO -Message '[WindowsConfig] Preparing Windows configuration engine.'
+        }
         Validate   = { $true }
         Execute    = {
             $repoRoot = Resolve-Path (Join-Path $PSScriptRoot '..\..')
@@ -261,6 +264,7 @@ function Get-WindowsConfigModuleDefinition {
         Verify     = {
             -not (@($script:PhoenixSettingResults) | Where-Object Status -eq 'FAIL')
         }
+        GetDetails = { $script:PhoenixSettingResults }
     }
 }
 

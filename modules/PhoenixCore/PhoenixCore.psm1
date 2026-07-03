@@ -61,7 +61,13 @@ function Invoke-PhoenixModuleLifecycle {
         [scriptblock]$Initialize,
         [scriptblock]$Validate,
         [scriptblock]$Execute,
-        [scriptblock]$Verify
+        [scriptblock]$Verify,
+
+        # Optional: returns the module's per-item results (installs, settings,
+        # checks) for the deployment report. Attached to the health object's
+        # Details property after the lifecycle completes; a failure here
+        # degrades to Details = $null, never a module failure. See ADR 0010.
+        [scriptblock]$GetDetails
     )
 
     $start = Get-Date
@@ -71,6 +77,7 @@ function Invoke-PhoenixModuleLifecycle {
         HealthPercent = 0
         LastRun       = $start.ToString('o')
         Issues        = [System.Collections.Generic.List[string]]::new()
+        Details       = $null
     }
 
     try {
@@ -110,6 +117,15 @@ function Invoke-PhoenixModuleLifecycle {
         $health.HealthPercent = 0
         $health.Issues.Add($_.Exception.Message)
         Write-PhoenixLog -Level ERROR -Message "[$Name] $($_.Exception.Message)"
+    }
+
+    if ($GetDetails) {
+        try {
+            $health.Details = & $GetDetails
+        }
+        catch {
+            Write-PhoenixLog -Level WARNING -Message "[$Name] GetDetails failed: $($_.Exception.Message)"
+        }
     }
 
     return $health

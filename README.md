@@ -38,6 +38,7 @@ Project-Phoenix/
 ├── dashboard/          Health dashboard
 ├── installers/         Installer module assets
 ├── logs/               Runtime logs (not committed)
+├── reports/            Deployment reports, HTML + JSON (not committed)
 ├── temp/               Scratch space (not committed)
 │
 ├── Bootstrap.ps1       Single entry point
