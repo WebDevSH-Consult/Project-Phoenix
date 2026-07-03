@@ -12,11 +12,11 @@
     finished. No module.json by design; see ADR 0010.
 
     Depends on PhoenixLogging being imported first; imports PhoenixCore (for
-    Get-PhoenixVersion) and Validation (for Get-PhoenixGpuInfo) itself.
+    Get-PhoenixVersion) and HardwareDetection (for Get-PhoenixHardware) itself.
 #>
 
 Import-Module (Join-Path $PSScriptRoot '..\PhoenixCore\PhoenixCore.psd1')
-Import-Module (Join-Path $PSScriptRoot '..\Validation\Validation.psd1')
+Import-Module (Join-Path $PSScriptRoot '..\HardwareDetection\HardwareDetection.psd1')
 
 function Get-PhoenixGitCommit {
     <#
@@ -119,6 +119,13 @@ th { background: #f5f5f5; }
 <tr><td>Timestamp</td><td>$(Encode $Report.Timestamp)</td></tr>
 </table>
 <h2>Hardware</h2>
+<table class="meta">
+<tr><td>CPU</td><td>$(Encode $Report.Hardware.Cpu.Name) [$(Encode $Report.Hardware.Cpu.Vendor)]</td></tr>
+<tr><td>Memory</td><td>$($Report.Hardware.MemoryGB) GB</td></tr>
+<tr><td>System</td><td>$(Encode $Report.Hardware.System.Manufacturer) $(Encode $Report.Hardware.System.Model) ($(Encode $Report.Hardware.System.FormFactor))</td></tr>
+<tr><td>TPM</td><td>$(Encode $Report.Hardware.Tpm)</td></tr>
+<tr><td>Secure Boot</td><td>$(Encode $Report.Hardware.SecureBoot)</td></tr>
+</table>
 <table>
 <tr><th>GPU</th><th>Vendor</th></tr>
 $($gpuRows -join "`n")
@@ -175,9 +182,7 @@ function New-PhoenixDeploymentReport {
             UserName     = [System.Environment]::UserName
             OSVersion    = [System.Environment]::OSVersion.VersionString
         }
-        Hardware        = [PSCustomObject]@{
-            Gpus = @(Get-PhoenixGpuInfo)
-        }
+        Hardware        = Get-PhoenixHardware
         Summary         = [PSCustomObject]@{
             Failures = $failures
             Warnings = $warnings
