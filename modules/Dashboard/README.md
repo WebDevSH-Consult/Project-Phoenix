@@ -18,7 +18,7 @@ Per-item results (each install, each setting with its previous value, each valid
 | Phoenix version | `Get-PhoenixVersion` (`VERSION` file) |
 | Git commit | `Get-PhoenixGitCommit` (mockable; `unknown` outside a git checkout) |
 | Duration | Measured by `Bootstrap.ps1` |
-| Hardware (GPUs + vendor) | `Get-PhoenixGpuInfo` from [Validation](../Validation/README.md) — the full Hardware Detection Engine is the next milestone |
+| Hardware (CPU, GPUs, memory, form factor, TPM, Secure Boot, ...) | `Get-PhoenixHardware` from [HardwareDetection](../HardwareDetection/README.md) |
 | Module health + per-item details | Orchestration results + the `Details` channel |
 | Failure/warning counts | Derived from the above |
 

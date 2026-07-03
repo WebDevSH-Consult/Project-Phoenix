@@ -21,7 +21,7 @@ Every check returns a structured result, logged via `Write-PhoenixLog` as it run
 
 ## What's implemented today
 
-- `Test-PhoenixGpu` — detects installed GPUs via `Get-CimInstance Win32_VideoController` and reports vendor (AMD/NVIDIA/Intel) **without assuming** which one is present. An unrecognised adapter name is `WARN`, not silently ignored or guessed at.
+- `Test-PhoenixGpu` — judges GPU state (present, vendor recognised) consuming `Get-PhoenixGpuInfo` from [HardwareDetection](../HardwareDetection/README.md), which is detection's canonical home (ADR 0011). An unrecognised adapter is `WARN`, not silently ignored or guessed at.
 - `Test-PhoenixCommandAvailable` — generic PATH-command check (used for `winget`, `git`).
 - `Test-PhoenixAppxPackageAvailable` — generic Microsoft Store package check. Absence is `WARN`, never `FAIL` — Phoenix never assumes a Store package exists or is expected.
 - `Test-PhoenixPathExists` — generic filesystem path check. Absence is `WARN`.
