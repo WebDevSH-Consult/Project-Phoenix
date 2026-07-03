@@ -47,6 +47,25 @@ function Get-PhoenixVersion {
     }
 }
 
+function Test-PhoenixElevated {
+    <#
+        .SYNOPSIS
+        Reports whether the current process holds administrator rights.
+
+        .DESCRIPTION
+        Phoenix never auto-elevates (ADR 0013): capabilities that need
+        rights the process doesn't have are skipped with a clear WARN and
+        a "re-run elevated" recommendation, never attempted blindly.
+    #>
+    [CmdletBinding()]
+    [OutputType([bool])]
+    param()
+
+    $identity = [System.Security.Principal.WindowsIdentity]::GetCurrent()
+    $principal = [System.Security.Principal.WindowsPrincipal]::new($identity)
+    return $principal.IsInRole([System.Security.Principal.WindowsBuiltInRole]::Administrator)
+}
+
 function Invoke-PhoenixModuleLifecycle {
     <#
         .SYNOPSIS
@@ -156,4 +175,4 @@ function Invoke-PhoenixBootstrap {
     return $results
 }
 
-Export-ModuleMember -Function Get-PhoenixVersion, Invoke-PhoenixModuleLifecycle, Invoke-PhoenixBootstrap
+Export-ModuleMember -Function Get-PhoenixVersion, Test-PhoenixElevated, Invoke-PhoenixModuleLifecycle, Invoke-PhoenixBootstrap
