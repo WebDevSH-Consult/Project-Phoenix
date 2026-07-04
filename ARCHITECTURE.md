@@ -36,6 +36,30 @@ Every module — without exception — follows the same six-stage lifecycle:
 5. **Log** — emit structured log entries for every action.
 6. **Report** — return a health/result object to Phoenix Core.
 
+## The Deployment Pipeline
+
+The per-module lifecycle above sits inside a larger, repository-wide pipeline that a full run moves through. Every capability Phoenix has — and every future one — fits into this sequence:
+
+```
+Detect      → what is this machine?         (HardwareDetection, RunOrder 20)
+   ↓
+Validate    → is the desired state met?     (per-module Validate stage; system checks in Validation)
+   ↓
+Preflight   → is it safe to change now?     (Installer preflight gate, ADR 0012)
+   ↓
+Execute     → make the change               (WindowsConfig 40, Installer 50)
+   ↓
+Verify      → did the change take?          (per-module Verify stage; idempotent re-read/re-check)
+   ↓
+Report      → what happened?                (Dashboard: HTML + JSON deployment report)
+   ↓
+Self-heal   → repair/retry/rollback         (where appropriate — see below)
+```
+
+This is a deliberate architectural principle, not an accident of what got built. New modules are expected to slot into it rather than sidestep it: detect before deciding, validate before acting, gate unsafe operations, verify every change, and report the outcome in the shared `{ Category, Name, Status, Message }` vocabulary.
+
+**Self-heal** is the maturing stage. Modules already capture what they need for it — WindowsConfig records each setting's `PreviousValue` (rollback data), the Installer retries with re-validation, and the preflight gate blocks known-unsafe states. Consolidating these into a consistent `Detect → Repair → Retry → Rollback → Verify` capability across modules is the [EPIC-04](./docs/roadmap/EPIC-04-System-Validation.md) self-healing goal and the core of the production-hardening phase toward v1.0.
+
 ## Health Objects
 
 Every module returns a health object consumed by the Dashboard module. Example shape:

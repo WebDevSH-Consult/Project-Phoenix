@@ -22,14 +22,16 @@ Workstation provisioning build-out (Roadmap 0.1–0.9 complete, working toward 1
 - None in progress — awaiting next task selection
 
 ## Next Planned Task
-- Toward v1.0, in agreed order:
+- Production-hardening phase (the numbered roadmap is functionally complete; remaining work is resilience, not new modules):
   1. Installer completeness: dry-run mode, WinGet upgrade/uninstall
-  2. Advanced validation + self-healing slices, then v1.0 release
+  2. Recovery / Rollback Engine — extend WindowsConfig's existing `PreviousValue` rollback data (and add equivalent capture for installs) into a `Detect → Repair → Retry → Rollback → Verify` self-healing capability. This is the EPIC-04 "self-heal" stage made real across modules.
+  3. Advanced validation slices, then the v1.0 release
 - Also pending: decide EPIC numbering for a "Hardware Awareness" epic doc (EPIC-05 was informally used for the Application Deployment Platform; suggest EPIC-06)
 
 ## Repository Health
-- 90% toward v1.0 (9 of 10 Roadmap milestones complete: 0.1–0.9)
-- EPIC-04 (System Validation & Self-Healing) in progress alongside the versioned milestones
+- Core roadmap (0.1–0.9) complete, plus Hardware Detection, the Installer Preflight gate, and the Elevation strategy.
+- Phase has shifted from feature development to **production hardening**: installer completeness, recovery/rollback, and v1.0 readiness. The goal now is that every module consistently follows the deployment pipeline (Detect → Validate → Preflight → Execute → Verify → Report, plus Self-heal where appropriate — see ARCHITECTURE.md), not that more modules exist.
+- EPIC-04 (System Validation & Self-Healing) in progress alongside the versioned milestones.
 
 ## Blockers
 - None currently. Known friction (not blocking): `develop`'s ruleset up-to-date requirement vs `main→develop` sync PRs — documented in `docs/standards/branch-protection.md`. Mitigation that worked for v0.7.0: cut the release branch from `develop` with `main` merged in first (content no-op), avoiding any ruleset changes.
@@ -39,7 +41,7 @@ Workstation provisioning build-out (Roadmap 0.1–0.9 complete, working toward 1
 - Repository is public; branch rulesets active on `main`/`develop` (PR required, 5 CI checks required, no force-push/deletion).
 - CI passing on `develop` HEAD.
 - Repository Metrics below are computed by hand (`find`/`grep` counts) at the end of each session — no automated script generates them yet. Worth automating once it becomes tedious.
-- WindowsConfig is HKCU-only by design for now; HKLM (telemetry policy, Windows Features, services) waits on an elevation-strategy ADR. `configs/windows.json`'s `DisableTelemetry` stays declared-but-inert until then (documented in the module README).
+- WindowsConfig now supports HKLM via the elevation strategy (ADR 0013): machine-scope settings apply when Bootstrap runs elevated, skip with a clear WARN otherwise. `DisableTelemetry` is live. Windows Features and service configuration remain future manifest `Type`s.
 - New engineering standing rules adopted this week: detect hardware before deciding, never assume AMD/NVIDIA or Store packages, validate every installation, tests for every deployment module, prefer self-healing over documentation.
 
 ## Current Repository Metrics
