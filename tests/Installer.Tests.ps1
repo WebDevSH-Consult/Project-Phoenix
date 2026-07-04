@@ -538,6 +538,7 @@ Describe 'Installer completeness: dry-run (ADR 0014)' {
     BeforeAll {
         Import-Module "$PSScriptRoot/../modules/PhoenixLogging/PhoenixLogging.psd1" -Force
         Import-Module "$PSScriptRoot/../modules/Validation/Validation.psd1" -Force
+        Import-Module "$PSScriptRoot/../modules/PhoenixBootstrap/PhoenixBootstrap.psd1" -Force
         Import-Module "$PSScriptRoot/../modules/Installer/Installer.psd1" -Force
         Initialize-PhoenixLog -LogDirectory (Join-Path $TestDrive 'logs')
 
