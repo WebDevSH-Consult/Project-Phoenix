@@ -4,6 +4,10 @@ All notable changes to this project are documented in this file. Format follows 
 
 ## [Unreleased]
 
+## [0.8.0] - Configuration, Reporting & Hardening
+
+Completes the numbered roadmap (Windows Configuration 0.8, Health Dashboard 0.9) and adds the production-hardening layer: Hardware Detection, the Installer Preflight safety gate, and the Elevation strategy.
+
 ### Added
 - Elevation strategy (ADR [0013](docs/adr/0013-elevation-strategy.md)): detect and declare, never auto-elevate. `Test-PhoenixElevated` in `PhoenixCore`; setting manifests gain optional `RequiresElevation`; `Set-PhoenixSetting` checks desired state first (reads need no rights, so idempotent skips still `PASS`), then skips actual changes with a clear `WARN` + "re-run elevated" when rights are missing. `Bootstrap.ps1` states its elevation up front.
 - First machine-scope setting: telemetry minimization (`HKLM` `DataCollection\AllowTelemetry = 1`), finally putting `windows.DisableTelemetry` to work. (`1` is the effective minimum on Windows Pro; `0` applies only to Enterprise/Education.)
