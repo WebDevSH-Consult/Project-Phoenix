@@ -40,7 +40,10 @@ If you're making a decision that future-you (or a contributor) will ask "why did
 
 ## Module Standards
 
-Every module implements the lifecycle defined in [ARCHITECTURE.md](./ARCHITECTURE.md): Initialise → Validate → Execute → Verify → Log → Report. No exceptions, no shortcuts.
+Two lifecycles govern every module, both defined in [ARCHITECTURE.md](./ARCHITECTURE.md):
+
+- **The module lifecycle** each orchestrated run passes through: Initialise → Validate → Execute → Verify → Log → Report. No exceptions, no shortcuts.
+- **The Phoenix Deployment Lifecycle** the module fits into repository-wide: Detect → Validate → Preflight → Execute → Verify → Report → Self-Heal. A module may omit stages that don't apply to it, but **must never bypass Validate or Verify** — Phoenix does not make changes it hasn't confirmed are needed, nor claim success it hasn't confirmed. New modules slot into this sequence rather than sidestep it.
 
 ## Validation First
 
