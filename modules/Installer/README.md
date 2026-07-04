@@ -60,6 +60,16 @@ Before installing anything, `Install-PhoenixApplications` and `Invoke-PhoenixPro
 
 Every result is `{ Category: 'Application', Name, Status, Message }` — the same shape [modules/Validation](../Validation/README.md) uses, so installer and validation results compose into one vocabulary.
 
+## Dry-run, upgrade, uninstall (ADR 0014)
+
+| Operation | Function | Behaviour |
+|---|---|---|
+| **Dry-run** | `-DryRun` on `Install-PhoenixApplication` / `Install-PhoenixApplications` / `Invoke-PhoenixProfile` | Previews the plan, invokes no backend, skips the preflight gate. Already satisfied → `PASS` ("no action would be taken"); change pending → `WARN` ("would install via <backend>"). Surfaces drift without failing the run. |
+| **Upgrade** | `Update-PhoenixApplication -Manifest` | WinGet: `winget upgrade`. Not installed → `WARN` (nothing to upgrade); non-WinGet backend → `WARN` (not supported). |
+| **Uninstall** | `Uninstall-PhoenixApplication -Manifest` | WinGet (`winget uninstall`) and MSI (`msiexec /x`), each verified gone afterward. Not installed → `PASS` (idempotent); EXE → `WARN` (no standard silent uninstall). |
+
+Upgrade and uninstall are operator-invoked utilities — the orchestrated bootstrap run provisions *toward* a desired state, it doesn't remove things.
+
 ## Workstation profiles
 
 A profile is a JSON file under [`profiles/`](../../profiles/) at the repository root — a named, explicit application selection (see [ADR 0008](../../docs/adr/0008-workstation-profiles.md)):

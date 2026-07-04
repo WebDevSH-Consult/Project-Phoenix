@@ -4,6 +4,13 @@ All notable changes to this project are documented in this file. Format follows 
 
 ## [Unreleased]
 
+### Added
+- Installer completeness (ADR [0014](docs/adr/0014-installer-completeness.md)): dry-run, upgrade, and uninstall round out the Application Deployment Engine.
+  - **Dry-run**: `-DryRun` on `Install-PhoenixApplication`, `Install-PhoenixApplications`, and `Invoke-PhoenixProfile` previews the plan without invoking any backend (already satisfied → `PASS`; change pending → `WARN`) and skips the preflight gate, since a preview changes nothing.
+  - **Upgrade**: `Update-PhoenixApplication` (`winget upgrade`); not-installed and non-WinGet backends report `WARN` rather than a silent no-op.
+  - **Uninstall**: `Uninstall-PhoenixApplication` (`winget uninstall` / `msiexec /x`), verified gone afterward; idempotent when not installed; EXE reports `WARN` (no standard silent uninstall). Upgrade and uninstall are operator-invoked, not part of the orchestrated bootstrap run.
+  - New mockable backend wrappers `Update-PhoenixWinGetPackage`, `Uninstall-PhoenixWinGetPackage`, `Uninstall-PhoenixMsiPackage`, and Pester coverage for every path (all backends mocked — no test runs a real installer).
+
 ## [0.8.0] - Configuration, Reporting & Hardening
 
 Completes the numbered roadmap (Windows Configuration 0.8, Health Dashboard 0.9) and adds the production-hardening layer: Hardware Detection, the Installer Preflight safety gate, and the Elevation strategy.
