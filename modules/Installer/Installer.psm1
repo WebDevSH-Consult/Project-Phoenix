@@ -11,6 +11,9 @@
     needed, rather than relying on orchestration having already done so).
 #>
 
+Import-Module (Join-Path $PSScriptRoot '..\PhoenixConfig\PhoenixConfig.psd1')
+Import-Module (Join-Path $PSScriptRoot '..\Validation\Validation.psd1')
+
 #region Backends - thin, mockable wrappers around the actual install invocation
 
 function Invoke-PhoenixWinGet {
@@ -201,38 +204,6 @@ function Get-PhoenixApplicationManifest {
 
 #endregion
 
-#region Configuration gating
-
-function Get-PhoenixConfigValue {
-    <#
-        .SYNOPSIS
-        Resolves a dot-path (e.g. "applications.InstallGit") against a merged
-        Phoenix configuration object. Returns $false if any segment is
-        missing - an undeclared flag is never assumed to mean "install it".
-    #>
-    [CmdletBinding()]
-    [OutputType([bool])]
-    param(
-        [Parameter(Mandatory)]
-        [PSCustomObject]$Configuration,
-
-        [Parameter(Mandatory)]
-        [string]$Path
-    )
-
-    $current = $Configuration.Modules
-    foreach ($segment in ($Path -split '\.')) {
-        if ($null -eq $current -or $current.PSObject.Properties.Name -notcontains $segment) {
-            return $false
-        }
-        $current = $current.$segment
-    }
-
-    return [bool]$current
-}
-
-#endregion
-
 #region Install + validate + retry
 
 function Test-PhoenixApplicationSatisfied {
@@ -335,8 +306,21 @@ function Install-PhoenixApplications {
         [PSCustomObject[]]$Manifests,
 
         [Parameter(Mandatory)]
-        [PSCustomObject]$Configuration
+        [PSCustomObject]$Configuration,
+
+        # Escape hatch for the preflight safety gate (ADR 0012). Off by
+        # default: no system-level installation runs on a non-idle Windows
+        # servicing state.
+        [switch]$SkipPreflight
     )
+
+    if (-not $SkipPreflight) {
+        $preflight = Get-PhoenixPreflightState
+        if (-not $preflight.Safe) {
+            Write-PhoenixLog -Level ERROR -Message '[Installer] Preflight failed - system is not in a safe state for installation. Nothing will be installed.'
+            return @($preflight.Results | Where-Object Status -eq 'FAIL')
+        }
+    }
 
     $enabled = @($Manifests | Where-Object { Get-PhoenixConfigValue -Configuration $Configuration -Path $_.ConfigFlag })
     Write-PhoenixLog -Level INFO -Message "[Installer] $($Manifests.Count) application manifest(s) discovered; $($enabled.Count) enabled by configuration."
@@ -501,7 +485,12 @@ function Invoke-PhoenixProfile {
 
         [string]$RootPath,
 
-        [int]$MaxAttempts = 2
+        [int]$MaxAttempts = 2,
+
+        # Escape hatch for the preflight safety gate (ADR 0012). Off by
+        # default: no system-level installation runs on a non-idle Windows
+        # servicing state.
+        [switch]$SkipPreflight
     )
 
     Import-Module (Join-Path $PSScriptRoot '..\Validation\Validation.psd1') -Force
@@ -509,6 +498,14 @@ function Invoke-PhoenixProfile {
 
     if (-not $RootPath) {
         $RootPath = Resolve-Path (Join-Path $PSScriptRoot '..\..')
+    }
+
+    if (-not $SkipPreflight) {
+        $preflight = Get-PhoenixPreflightState
+        if (-not $preflight.Safe) {
+            Write-PhoenixLog -Level ERROR -Message "[Installer] Preflight failed - system is not in a safe state for installation. Profile '$ProfileName' will not be applied."
+            return @($preflight.Results | Where-Object Status -eq 'FAIL')
+        }
     }
 
     $workstationProfile = Get-PhoenixProfile -ProfilesPath (Join-Path $RootPath 'profiles') -ProfileName $ProfileName
@@ -552,6 +549,7 @@ function Get-InstallerModuleDefinition {
     return @{
         Name       = 'Installer'
         Initialize = {
+            $script:PhoenixInstallResults = @()
             Import-Module (Join-Path $PSScriptRoot '..\Validation\Validation.psd1') -Force
             Write-PhoenixLog -Level INFO -Message '[Installer] Preparing application deployment engine.'
         }
@@ -569,9 +567,10 @@ function Get-InstallerModuleDefinition {
         Verify     = {
             -not (@($script:PhoenixInstallResults) | Where-Object Status -eq 'FAIL')
         }
+        GetDetails = { $script:PhoenixInstallResults }
     }
 }
 
 #endregion
 
-Export-ModuleMember -Function Get-PhoenixApplicationManifest, Get-PhoenixConfigValue, Test-PhoenixApplicationSatisfied, Install-PhoenixWinGetPackage, Install-PhoenixMsiPackage, Install-PhoenixExePackage, Install-PhoenixApplication, Install-PhoenixApplications, Get-PhoenixProfile, Expand-PhoenixProfileApplications, Invoke-PhoenixProfile, Get-InstallerModuleDefinition
+Export-ModuleMember -Function Get-PhoenixApplicationManifest, Test-PhoenixApplicationSatisfied, Install-PhoenixWinGetPackage, Install-PhoenixMsiPackage, Install-PhoenixExePackage, Install-PhoenixApplication, Install-PhoenixApplications, Get-PhoenixProfile, Expand-PhoenixProfileApplications, Invoke-PhoenixProfile, Get-InstallerModuleDefinition

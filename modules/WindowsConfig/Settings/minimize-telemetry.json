@@ -1,0 +1,10 @@
+{
+  "Name": "Minimize diagnostic data (telemetry)",
+  "Type": "Registry",
+  "ConfigFlag": "windows.DisableTelemetry",
+  "RequiresElevation": true,
+  "Path": "HKLM:\\SOFTWARE\\Policies\\Microsoft\\Windows\\DataCollection",
+  "ValueName": "AllowTelemetry",
+  "DesiredValue": 1,
+  "ValueKind": "DWord"
+}

@@ -33,6 +33,27 @@ Describe 'Invoke-PhoenixModuleLifecycle' {
         $health = Invoke-PhoenixModuleLifecycle -Name 'NoOp'
         $health.Status | Should -Be 'Healthy'
     }
+
+    It 'attaches GetDetails output to the health object''s Details property' {
+        $health = Invoke-PhoenixModuleLifecycle -Name 'Test' -GetDetails {
+            @([PSCustomObject]@{ Category = 'Application'; Name = 'Git'; Status = 'PASS'; Message = 'ok' })
+        }
+
+        @($health.Details).Count | Should -Be 1
+        @($health.Details)[0].Name | Should -Be 'Git'
+    }
+
+    It 'leaves Details null when no GetDetails is provided' {
+        $health = Invoke-PhoenixModuleLifecycle -Name 'Test'
+        $health.Details | Should -BeNullOrEmpty
+    }
+
+    It 'degrades to null Details, not a module failure, when GetDetails throws' {
+        $health = Invoke-PhoenixModuleLifecycle -Name 'Test' -GetDetails { throw 'details boom' }
+
+        $health.Status | Should -Be 'Healthy'
+        $health.Details | Should -BeNullOrEmpty
+    }
 }
 
 Describe 'Invoke-PhoenixBootstrap' {
@@ -67,5 +88,12 @@ Describe 'Get-PhoenixVersion' {
         New-Item -ItemType Directory -Path $root -Force | Out-Null
 
         { Get-PhoenixVersion -RootPath $root } | Should -Throw '*VERSION*'
+    }
+}
+
+Describe 'Test-PhoenixElevated' {
+    It 'returns a boolean without throwing' {
+        $result = Test-PhoenixElevated
+        $result | Should -BeOfType [bool]
     }
 }

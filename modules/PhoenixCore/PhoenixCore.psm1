@@ -47,6 +47,25 @@ function Get-PhoenixVersion {
     }
 }
 
+function Test-PhoenixElevated {
+    <#
+        .SYNOPSIS
+        Reports whether the current process holds administrator rights.
+
+        .DESCRIPTION
+        Phoenix never auto-elevates (ADR 0013): capabilities that need
+        rights the process doesn't have are skipped with a clear WARN and
+        a "re-run elevated" recommendation, never attempted blindly.
+    #>
+    [CmdletBinding()]
+    [OutputType([bool])]
+    param()
+
+    $identity = [System.Security.Principal.WindowsIdentity]::GetCurrent()
+    $principal = [System.Security.Principal.WindowsPrincipal]::new($identity)
+    return $principal.IsInRole([System.Security.Principal.WindowsBuiltInRole]::Administrator)
+}
+
 function Invoke-PhoenixModuleLifecycle {
     <#
         .SYNOPSIS
@@ -61,7 +80,13 @@ function Invoke-PhoenixModuleLifecycle {
         [scriptblock]$Initialize,
         [scriptblock]$Validate,
         [scriptblock]$Execute,
-        [scriptblock]$Verify
+        [scriptblock]$Verify,
+
+        # Optional: returns the module's per-item results (installs, settings,
+        # checks) for the deployment report. Attached to the health object's
+        # Details property after the lifecycle completes; a failure here
+        # degrades to Details = $null, never a module failure. See ADR 0010.
+        [scriptblock]$GetDetails
     )
 
     $start = Get-Date
@@ -71,6 +96,7 @@ function Invoke-PhoenixModuleLifecycle {
         HealthPercent = 0
         LastRun       = $start.ToString('o')
         Issues        = [System.Collections.Generic.List[string]]::new()
+        Details       = $null
     }
 
     try {
@@ -112,6 +138,15 @@ function Invoke-PhoenixModuleLifecycle {
         Write-PhoenixLog -Level ERROR -Message "[$Name] $($_.Exception.Message)"
     }
 
+    if ($GetDetails) {
+        try {
+            $health.Details = & $GetDetails
+        }
+        catch {
+            Write-PhoenixLog -Level WARNING -Message "[$Name] GetDetails failed: $($_.Exception.Message)"
+        }
+    }
+
     return $health
 }
 
@@ -140,4 +175,4 @@ function Invoke-PhoenixBootstrap {
     return $results
 }
 
-Export-ModuleMember -Function Get-PhoenixVersion, Invoke-PhoenixModuleLifecycle, Invoke-PhoenixBootstrap
+Export-ModuleMember -Function Get-PhoenixVersion, Test-PhoenixElevated, Invoke-PhoenixModuleLifecycle, Invoke-PhoenixBootstrap

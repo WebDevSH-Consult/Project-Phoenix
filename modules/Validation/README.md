@@ -21,7 +21,7 @@ Every check returns a structured result, logged via `Write-PhoenixLog` as it run
 
 ## What's implemented today
 
-- `Test-PhoenixGpu` — detects installed GPUs via `Get-CimInstance Win32_VideoController` and reports vendor (AMD/NVIDIA/Intel) **without assuming** which one is present. An unrecognised adapter name is `WARN`, not silently ignored or guessed at.
+- `Test-PhoenixGpu` — judges GPU state (present, vendor recognised) consuming `Get-PhoenixGpuInfo` from [HardwareDetection](../HardwareDetection/README.md), which is detection's canonical home (ADR 0011). An unrecognised adapter is `WARN`, not silently ignored or guessed at.
 - `Test-PhoenixCommandAvailable` — generic PATH-command check (used for `winget`, `git`).
 - `Test-PhoenixAppxPackageAvailable` — generic Microsoft Store package check. Absence is `WARN`, never `FAIL` — Phoenix never assumes a Store package exists or is expected.
 - `Test-PhoenixPathExists` — generic filesystem path check. Absence is `WARN`.
@@ -30,6 +30,17 @@ Every check returns a structured result, logged via `Write-PhoenixLog` as it run
 ## What's intentionally not implemented yet
 
 GameBar, Rockstar, Xbox Services, URI handler, and AI-tooling checks are **not** built yet — no installer module exists for them yet either. Steam/Epic/Git/VS Code/7-Zip/PowerShell now have manifests in [modules/Installer](../Installer/README.md), which reuses this module's `Test-Phoenix*` probes for its own install/verify flow. See [EPIC-04](../../docs/roadmap/EPIC-04-System-Validation.md) for the full planned scope.
+
+## Installer preflight (ADR 0012)
+
+One universal rule: **no system-level installation runs on a non-idle Windows servicing state.** Motivated by a real AMD driver failure (Error 206) caused by pending file operations; applies equally to WinGet, MSI, and EXE installs.
+
+- `Test-PhoenixPendingReboot` — Component Based Servicing / Windows Update reboot-pending keys → `FAIL` with "restart before continuing".
+- `Test-PhoenixPendingFileOperations` — `PendingFileRenameOperations` non-empty → `FAIL`, naming a sample of the components involved.
+- `Test-PhoenixActiveInstaller` — the `Global\_MSIExecute` mutex held → `FAIL`: another installation is in progress.
+- `Get-PhoenixPreflightState` — runs all three, returns `{ Safe; Results }`.
+
+[`Install-PhoenixApplications`](../Installer/README.md) and `Invoke-PhoenixProfile` run this gate before touching anything and install nothing on `FAIL` (escape hatch: `-SkipPreflight`). These checks are deliberately *not* part of `Invoke-PhoenixValidationReport` — after installs, a pending reboot is often the expected result of installing, a different question than "is it safe to start?".
 
 ## Adding a new check
 

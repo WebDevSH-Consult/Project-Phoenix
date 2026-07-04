@@ -5,7 +5,7 @@
     Author            = 'Project Phoenix'
     Description       = 'Configuration engine: loads phoenix.json and its referenced per-domain config files into one merged object. Requires PhoenixLogging to be imported first.'
     PowerShellVersion = '7.0'
-    FunctionsToExport = @('Get-PhoenixConfiguration')
+    FunctionsToExport = @('Get-PhoenixConfiguration', 'Get-PhoenixConfigValue')
     CmdletsToExport   = @()
     VariablesToExport = @()
     AliasesToExport   = @()

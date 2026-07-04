@@ -1,4 +1,4 @@
-Describe 'Get-PhoenixGpuInfo / Test-PhoenixGpu' {
+Describe 'Test-PhoenixGpu' {
     BeforeAll {
         Import-Module "$PSScriptRoot/../modules/PhoenixLogging/PhoenixLogging.psd1" -Force
         Import-Module "$PSScriptRoot/../modules/Validation/Validation.psd1" -Force
@@ -6,8 +6,8 @@ Describe 'Get-PhoenixGpuInfo / Test-PhoenixGpu' {
     }
 
     It 'reports PASS and the correct vendor for an AMD adapter, without assuming AMD' {
-        Mock -ModuleName Validation Get-CimInstance {
-            [PSCustomObject]@{ Name = 'AMD Radeon RX 7900 XT' }
+        Mock -ModuleName Validation Get-PhoenixGpuInfo {
+            @([PSCustomObject]@{ Name = 'AMD Radeon RX 7900 XT'; Vendor = 'AMD' })
         }
 
         $result = Test-PhoenixGpu
@@ -17,8 +17,8 @@ Describe 'Get-PhoenixGpuInfo / Test-PhoenixGpu' {
     }
 
     It 'reports PASS and the correct vendor for an NVIDIA adapter, without assuming NVIDIA' {
-        Mock -ModuleName Validation Get-CimInstance {
-            [PSCustomObject]@{ Name = 'NVIDIA GeForce RTX 4080' }
+        Mock -ModuleName Validation Get-PhoenixGpuInfo {
+            @([PSCustomObject]@{ Name = 'NVIDIA GeForce RTX 4080'; Vendor = 'NVIDIA' })
         }
 
         $result = Test-PhoenixGpu
@@ -28,8 +28,8 @@ Describe 'Get-PhoenixGpuInfo / Test-PhoenixGpu' {
     }
 
     It 'reports WARN, not an error, for an unrecognised adapter vendor' {
-        Mock -ModuleName Validation Get-CimInstance {
-            [PSCustomObject]@{ Name = 'Some Unbranded Display Adapter' }
+        Mock -ModuleName Validation Get-PhoenixGpuInfo {
+            @([PSCustomObject]@{ Name = 'Some Unbranded Display Adapter'; Vendor = 'Unknown' })
         }
 
         $result = Test-PhoenixGpu
@@ -38,7 +38,7 @@ Describe 'Get-PhoenixGpuInfo / Test-PhoenixGpu' {
     }
 
     It 'reports FAIL when no GPU is detected at all' {
-        Mock -ModuleName Validation Get-CimInstance { }
+        Mock -ModuleName Validation Get-PhoenixGpuInfo { @() }
 
         $result = Test-PhoenixGpu
 
@@ -175,5 +175,94 @@ Describe 'Get-ValidationModuleDefinition' {
         $health = Invoke-PhoenixModuleLifecycle @definition
 
         $health.Status | Should -Be 'Healthy'
+    }
+}
+
+Describe 'Installer preflight (ADR 0012)' {
+    BeforeAll {
+        Import-Module "$PSScriptRoot/../modules/PhoenixLogging/PhoenixLogging.psd1" -Force
+        Import-Module "$PSScriptRoot/../modules/Validation/Validation.psd1" -Force
+        Initialize-PhoenixLog -LogDirectory (Join-Path $TestDrive 'logs')
+    }
+
+    It 'Test-PhoenixPendingReboot FAILs when Component Based Servicing signals a reboot' {
+        Mock -ModuleName Validation Test-PhoenixPreflightRegistryKey {
+            param($Path)
+            return ($Path -match 'Component Based Servicing')
+        }
+
+        $result = Test-PhoenixPendingReboot
+
+        $result.Status | Should -Be 'FAIL'
+        $result.Message | Should -Match 'Component Based Servicing'
+        $result.Message | Should -Match 'Restart'
+    }
+
+    It 'Test-PhoenixPendingReboot FAILs when Windows Update signals a reboot' {
+        Mock -ModuleName Validation Test-PhoenixPreflightRegistryKey {
+            param($Path)
+            return ($Path -match 'RebootRequired')
+        }
+
+        (Test-PhoenixPendingReboot).Status | Should -Be 'FAIL'
+    }
+
+    It 'Test-PhoenixPendingReboot PASSes when neither signal is present' {
+        Mock -ModuleName Validation Test-PhoenixPreflightRegistryKey { $false }
+
+        (Test-PhoenixPendingReboot).Status | Should -Be 'PASS'
+    }
+
+    It 'Test-PhoenixPendingFileOperations FAILs with count and components when operations are pending' {
+        Mock -ModuleName Validation Get-PhoenixPreflightRegistryValue {
+            @('\??\C:\Program Files\OneDrive\old.dll', '', '\??\C:\Windows\Temp\chrome_update.exe', '')
+        }
+
+        $result = Test-PhoenixPendingFileOperations
+
+        $result.Status | Should -Be 'FAIL'
+        $result.Message | Should -Match '2 pending'
+        $result.Message | Should -Match 'old.dll'
+        $result.Message | Should -Match 'Restart'
+    }
+
+    It 'Test-PhoenixPendingFileOperations PASSes when the value is absent' {
+        Mock -ModuleName Validation Get-PhoenixPreflightRegistryValue { $null }
+
+        (Test-PhoenixPendingFileOperations).Status | Should -Be 'PASS'
+    }
+
+    It 'Test-PhoenixActiveInstaller FAILs when the MSI mutex is held' {
+        Mock -ModuleName Validation Test-PhoenixMsiMutexHeld { $true }
+
+        $result = Test-PhoenixActiveInstaller
+
+        $result.Status | Should -Be 'FAIL'
+        $result.Message | Should -Match 'in progress'
+    }
+
+    It 'Test-PhoenixActiveInstaller PASSes when no installer is running' {
+        Mock -ModuleName Validation Test-PhoenixMsiMutexHeld { $false }
+
+        (Test-PhoenixActiveInstaller).Status | Should -Be 'PASS'
+    }
+
+    It 'Get-PhoenixPreflightState is Safe only when every check passes' {
+        Mock -ModuleName Validation Test-PhoenixPreflightRegistryKey { $false }
+        Mock -ModuleName Validation Get-PhoenixPreflightRegistryValue { $null }
+        Mock -ModuleName Validation Test-PhoenixMsiMutexHeld { $false }
+
+        $state = Get-PhoenixPreflightState
+
+        $state.Safe | Should -Be $true
+        @($state.Results).Count | Should -Be 3
+    }
+
+    It 'Get-PhoenixPreflightState is unsafe when any check fails' {
+        Mock -ModuleName Validation Test-PhoenixPreflightRegistryKey { $false }
+        Mock -ModuleName Validation Get-PhoenixPreflightRegistryValue { @('\??\C:\pending.dll') }
+        Mock -ModuleName Validation Test-PhoenixMsiMutexHeld { $false }
+
+        (Get-PhoenixPreflightState).Safe | Should -Be $false
     }
 }

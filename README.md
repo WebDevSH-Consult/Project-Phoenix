@@ -2,7 +2,7 @@
 
 > A fully automated, AI-powered Windows workstation platform that can rebuild itself from a clean Windows installation.
 
-[![Version](https://img.shields.io/badge/version-0.7.0--profiles-orange)](./CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-0.8.0--hardening-orange)](./CHANGELOG.md)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue)](./LICENSE)
 
 Project Phoenix is not a script. It is a platform: a modular, version-controlled, self-validating system for building, configuring, and maintaining a Windows workstation as Infrastructure-as-Code.
@@ -38,6 +38,7 @@ Project-Phoenix/
 ├── dashboard/          Health dashboard
 ├── installers/         Installer module assets
 ├── logs/               Runtime logs (not committed)
+├── reports/            Deployment reports, HTML + JSON (not committed)
 ├── temp/               Scratch space (not committed)
 │
 ├── Bootstrap.ps1       Single entry point
@@ -66,4 +67,4 @@ See [CONTRIBUTING.md](./CONTRIBUTING.md) for the full branch strategy, commit st
 
 ## Status
 
-**Version 0.7.0 — Application Deployment Platform.** The engine stack is complete through Roadmap 0.7: configuration, orchestration, a manifest-driven application installer (`modules/Installer`), hardware-agnostic validation (`modules/Validation`), and workstation profiles (`Invoke-PhoenixProfile Gaming` / `Development`). Next up: Windows Configuration (0.8) and the Health Dashboard (0.9) per [ROADMAP.md](./ROADMAP.md).
+**Version 0.8.0 — Configuration, Reporting & Hardening.** The numbered roadmap (0.1–0.9) is complete: orchestration, application installer, workstation profiles, Windows Configuration (`modules/WindowsConfig`), and the Health Dashboard (HTML + JSON deployment reports). Plus hardware detection (`Get-PhoenixHardware`), an installer preflight safety gate, and a detect-and-declare elevation strategy. The project is now in its **production-hardening** phase — installer completeness, recovery/rollback, and v1.0 readiness — with every module following the deployment pipeline defined in [ARCHITECTURE.md](./ARCHITECTURE.md). See [ROADMAP.md](./ROADMAP.md).

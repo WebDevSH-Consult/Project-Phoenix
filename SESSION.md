@@ -1,7 +1,7 @@
 # Project Phoenix Session Log
 
 ## Current Sprint
-Application Deployment Platform build-out (Roadmap 0.1–0.7 complete)
+Workstation provisioning build-out (Roadmap 0.1–0.9 complete, working toward 1.0)
 
 ## Last Completed
 - PHX-001 Repository Foundation (v0.1.0)
@@ -10,39 +10,46 @@ Application Deployment Platform build-out (Roadmap 0.1–0.7 complete)
 - PHX-002 Version Reporting (issue [#13](https://github.com/WebDevSH-Consult/Project-Phoenix/issues/13), closed)
 - Roadmap 0.5 Bootstrap Engine: `modules/PhoenixBootstrap` — module discovery via `module.json`, dependency resolution, orchestration. ADR [0006](docs/adr/0006-module-manifest-and-orchestration.md).
 - EPIC-04 System Validation (first slice): `modules/Validation` — hardware-agnostic PASS/WARN/FAIL engine; "Validation First" standard in `CONTRIBUTING.md`
-- Roadmap 0.6 Application Deployment Engine: `modules/Installer` — manifest-driven (6 application manifests), idempotent install/retry/verify, WinGet/MSI/EXE backends, config-gated, reuses Validation probes and `Resolve-PhoenixModuleOrder`. ADR [0007](docs/adr/0007-application-deployment-engine.md).
-- Roadmap 0.7 Workstation Profiles: `profiles/gaming.json` + `profiles/development.json`, `Invoke-PhoenixProfile <Name>` expands dependencies and installs through the existing engine, bypassing ConfigFlag gating (explicit selection). ADR [0008](docs/adr/0008-workstation-profiles.md).
+- Roadmap 0.6 Application Deployment Engine: `modules/Installer` — manifest-driven (6 application manifests), idempotent install/retry/verify, WinGet/MSI/EXE backends, config-gated. ADR [0007](docs/adr/0007-application-deployment-engine.md).
+- Roadmap 0.7 Workstation Profiles: `Invoke-PhoenixProfile Gaming` / `Development`. ADR [0008](docs/adr/0008-workstation-profiles.md). **v0.7.0 tagged and released.**
+- Roadmap 0.8 Windows Configuration: `modules/WindowsConfig` — settings as JSON manifests (`Settings/*.json`), Registry (HKCU) provider, idempotent apply with previous-value rollback data and post-write verification. `configs/windows.json` flags finally live. `Get-PhoenixConfigValue` relocated to its canonical home in `PhoenixConfig`. ADR [0009](docs/adr/0009-windows-configuration-engine.md).
+- Roadmap 0.9 Health Dashboard: `modules/Dashboard` — every `Bootstrap.ps1` run ends with a timestamped HTML + JSON deployment report under `reports/` (machine metadata, Phoenix version, git commit, GPU summary, duration, per-module health, per-item details, failure/warning counts). Enabled by a new optional `GetDetails` channel in `PhoenixCore` that Installer/WindowsConfig/Validation opt into. ADR [0010](docs/adr/0010-health-dashboard-reporting.md).
+- Hardware Detection Engine: `modules/HardwareDetection` (`Get-PhoenixHardware`) — CPU/GPU/RAM/form-factor/VM/motherboard/OS/TPM/SecureBoot/disks/network as one detected-never-assumed object; orchestrated at `RunOrder: 20` and consumable by any module. GPU detection relocated here from Validation. Deployment reports now carry the full hardware summary. ADR [0011](docs/adr/0011-hardware-detection-engine.md).
+- Installer Preflight safety gate: preflight checks in `modules/Validation` (`Get-PhoenixPreflightState` — pending reboot, `PendingFileRenameOperations`, active MSI session), gating `Install-PhoenixApplications` and `Invoke-PhoenixProfile` (nothing installs on `FAIL`; `-SkipPreflight` escape hatch). Validated against the live machine: it caught 21 real pending file operations including the AMD Adrenalin installer — the exact Error 206 scenario it was built to prevent. ADR [0012](docs/adr/0012-installer-preflight-gate.md).
+- Elevation strategy: detect-and-declare, never auto-elevate (`Test-PhoenixElevated` in PhoenixCore; `RequiresElevation` manifest field; WARN-skip with "re-run elevated" when rights are missing; idempotent PASS still works non-elevated since reads need no rights). First machine-scope setting shipped: telemetry minimization — `windows.DisableTelemetry` finally live. ADR [0013](docs/adr/0013-elevation-strategy.md).
 
 ## Current Task
 - None in progress — awaiting next task selection
 
 ## Next Planned Task
-- Candidates, roughly in value order:
-  1. Installer engine completeness: dry-run mode, WinGet upgrade/uninstall operations (rounds out the EPIC-05 Sprint 1/2 gaps)
-  2. Roadmap 0.8 Windows Configuration — first module that changes system state rather than installing software
-  3. Next EPIC-04 slice: per-application validation checks now that installers exist (Steam/Epic/GameBar service + URI probes)
+- Production-hardening phase (the numbered roadmap is functionally complete; remaining work is resilience, not new modules):
+  1. Installer completeness: dry-run mode, WinGet upgrade/uninstall
+  2. Recovery / Rollback Engine — extend WindowsConfig's existing `PreviousValue` rollback data (and add equivalent capture for installs) into a `Detect → Repair → Retry → Rollback → Verify` self-healing capability. This is the EPIC-04 "self-heal" stage made real across modules.
+  3. Advanced validation slices, then the v1.0 release
+- Also pending: decide EPIC numbering for a "Hardware Awareness" epic doc (EPIC-05 was informally used for the Application Deployment Platform; suggest EPIC-06)
 
 ## Repository Health
-- 70% toward v1.0 (7 of 10 Roadmap milestones complete: 0.1–0.7)
-- EPIC-04 (System Validation & Self-Healing) in progress alongside the versioned milestones
+- Core roadmap (0.1–0.9) complete, plus Hardware Detection, the Installer Preflight gate, and the Elevation strategy.
+- Phase has shifted from feature development to **production hardening**: installer completeness, recovery/rollback, and v1.0 readiness. The goal now is that every module consistently follows the deployment pipeline (Detect → Validate → Preflight → Execute → Verify → Report, plus Self-heal where appropriate — see ARCHITECTURE.md), not that more modules exist.
+- EPIC-04 (System Validation & Self-Healing) in progress alongside the versioned milestones.
 
 ## Blockers
-- None currently. Known friction (not blocking): `develop`'s branch ruleset requires the PR head to be up to date with base, which deadlocks on any `main → develop` sync PR by definition — documented in `docs/standards/branch-protection.md`. Prefer plain merges (not rebase-merges) for `develop → main` release PRs to avoid commit-graph divergence.
+- None currently. Known friction (not blocking): `develop`'s ruleset up-to-date requirement vs `main→develop` sync PRs — documented in `docs/standards/branch-protection.md`. Mitigation that worked for v0.7.0: cut the release branch from `develop` with `main` merged in first (content no-op), avoiding any ruleset changes.
 
 ## Notes
-- v0.2.0 tagged and released: https://github.com/WebDevSH-Consult/Project-Phoenix/releases/tag/v0.2.0 — `main` is now well behind `develop`; a v0.7.0 release cut is worth considering once profiles merge.
+- v0.7.0 tagged and released: https://github.com/WebDevSH-Consult/Project-Phoenix/releases/tag/v0.7.0
 - Repository is public; branch rulesets active on `main`/`develop` (PR required, 5 CI checks required, no force-push/deletion).
 - CI passing on `develop` HEAD.
 - Repository Metrics below are computed by hand (`find`/`grep` counts) at the end of each session — no automated script generates them yet. Worth automating once it becomes tedious.
-- ROADMAP restructured this session: 0.7 = Workstation Profiles (done), Windows Configuration → 0.8, Gaming Suite absorbed by manifests + the Gaming profile, Self-Healing and Cloud Sync → Beyond 1.0.
-- Canonical-schema proposal (rename `Installer`→`Provider`, `Validate`→`Validation`, reserve `Repair`/`Tags`/`Configuration` blocks) was considered and declined: shipped schema kept; JSON evolves additively so future fields land with the capabilities that read them. Decision recorded in this log and PR #24/#25 discussion.
+- WindowsConfig now supports HKLM via the elevation strategy (ADR 0013): machine-scope settings apply when Bootstrap runs elevated, skip with a clear WARN otherwise. `DisableTelemetry` is live. Windows Features and service configuration remain future manifest `Type`s.
+- New engineering standing rules adopted this week: detect hardware before deciding, never assume AMD/NVIDIA or Store packages, validate every installation, tests for every deployment module, prefer self-healing over documentation.
 
 ## Current Repository Metrics
 
-Modules: 7
-Tests: 84
-PowerShell Files: 22
-Markdown Documents: 38
+Modules: 10
+Tests: 137
+PowerShell Files: 31
+Markdown Documents: 46
 GitHub Workflows: 1
 CI Status: Passing
 Open Issues: 0

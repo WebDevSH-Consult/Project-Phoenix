@@ -71,9 +71,28 @@ After deployment, Phoenix validates that Windows is fully operational and automa
 ## Deliverables
 
 - Validation engine (generic PASS/WARN/FAIL contract, hardware-agnostic detection) — **shipped** in `modules/Validation`
-- Self-healing engine (safe, logged, opt-in remediation) — **planned**, extended per-category as installer modules exist to remediate against
-- HTML deployment report — **planned**, depends on the Health Dashboard milestone (Roadmap 0.9)
-- JSON validation report — **planned**
+- Installer preflight safety gate (no system-level install on a non-idle servicing state) — **shipped**, see ADR [0012](../adr/0012-installer-preflight-gate.md)
+- HTML + JSON deployment report — **shipped** in `modules/Dashboard` (Roadmap 0.9)
+- Self-healing / Recovery-Rollback engine — **planned** (the production-hardening focus toward v1.0)
+
+## Self-Healing Lifecycle (planned)
+
+The self-heal stage of the deployment pipeline (see [ARCHITECTURE.md](../../ARCHITECTURE.md#the-deployment-pipeline)) consolidates capabilities modules already have into one consistent flow:
+
+```
+Detect   → a check reports FAIL/WARN
+   ↓
+Repair   → apply a known, safe remediation
+   ↓
+Retry    → re-run the operation (Installer already does this)
+   ↓
+Rollback → restore prior state where a change made things worse
+           (WindowsConfig already captures PreviousValue rollback data)
+   ↓
+Verify   → confirm the system is now healthy
+```
+
+The building blocks exist — `PreviousValue` rollback data, installer retry with re-validation, the preflight gate. The remaining work is making this an explicit, cross-module capability rather than per-module behaviour.
 
 ## Design Principles
 

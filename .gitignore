@@ -3,3 +3,6 @@ logs/*
 
 temp/*
 !temp/.gitkeep
+
+reports/*
+!reports/.gitkeep

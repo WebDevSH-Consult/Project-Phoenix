@@ -65,38 +65,6 @@ Describe 'Get-PhoenixApplicationManifest' {
     }
 }
 
-Describe 'Get-PhoenixConfigValue' {
-    BeforeAll {
-        Import-Module "$PSScriptRoot/../modules/PhoenixLogging/PhoenixLogging.psd1" -Force
-        Import-Module "$PSScriptRoot/../modules/Installer/Installer.psd1" -Force
-        Initialize-PhoenixLog -LogDirectory (Join-Path $TestDrive 'logs')
-    }
-
-    It 'resolves a true dot-path' {
-        $config = [PSCustomObject]@{ Modules = [PSCustomObject]@{ applications = [PSCustomObject]@{ InstallGit = $true } } }
-
-        Get-PhoenixConfigValue -Configuration $config -Path 'applications.InstallGit' | Should -Be $true
-    }
-
-    It 'resolves a false dot-path' {
-        $config = [PSCustomObject]@{ Modules = [PSCustomObject]@{ applications = [PSCustomObject]@{ InstallGit = $false } } }
-
-        Get-PhoenixConfigValue -Configuration $config -Path 'applications.InstallGit' | Should -Be $false
-    }
-
-    It 'returns false, never throws, when the path segment does not exist' {
-        $config = [PSCustomObject]@{ Modules = [PSCustomObject]@{ applications = [PSCustomObject]@{} } }
-
-        Get-PhoenixConfigValue -Configuration $config -Path 'applications.InstallSomethingUndeclared' | Should -Be $false
-    }
-
-    It 'returns false when the whole domain is missing' {
-        $config = [PSCustomObject]@{ Modules = [PSCustomObject]@{} }
-
-        Get-PhoenixConfigValue -Configuration $config -Path 'gaming.InstallSteam' | Should -Be $false
-    }
-}
-
 Describe 'Test-PhoenixApplicationSatisfied' {
     BeforeAll {
         Import-Module "$PSScriptRoot/../modules/PhoenixLogging/PhoenixLogging.psd1" -Force
@@ -490,5 +458,78 @@ Describe 'Invoke-PhoenixProfile' {
 
     It 'throws cleanly for an unknown profile' {
         { Invoke-PhoenixProfile -ProfileName 'Ghost' -RootPath (Resolve-Path "$PSScriptRoot/..") } | Should -Throw '*Ghost*'
+    }
+}
+
+Describe 'Installer preflight gate (ADR 0012)' {
+    BeforeAll {
+        Import-Module "$PSScriptRoot/../modules/PhoenixLogging/PhoenixLogging.psd1" -Force
+        Import-Module "$PSScriptRoot/../modules/Validation/Validation.psd1" -Force
+        Import-Module "$PSScriptRoot/../modules/PhoenixBootstrap/PhoenixBootstrap.psd1" -Force
+        Import-Module "$PSScriptRoot/../modules/Installer/Installer.psd1" -Force
+        Initialize-PhoenixLog -LogDirectory (Join-Path $TestDrive 'logs')
+
+        $script:UnsafeState = [PSCustomObject]@{
+            Safe    = $false
+            Results = @(
+                [PSCustomObject]@{ Category = 'InstallerPreflight'; Name = 'Pending reboot'; Status = 'FAIL'; Message = 'Reboot pending. Restart the system before continuing.' }
+                [PSCustomObject]@{ Category = 'InstallerPreflight'; Name = 'Active installer'; Status = 'PASS'; Message = 'ok' }
+            )
+        }
+        $script:SafeState = [PSCustomObject]@{ Safe = $true; Results = @() }
+
+        $script:GateManifests = @(
+            [PSCustomObject]@{ Name = 'App'; Installer = 'Winget'; Id = 'A'; ConfigFlag = 'applications.InstallA'; Validate = @(); Dependencies = @(); RunOrder = 100 }
+        )
+        $script:GateConfig = [PSCustomObject]@{ Modules = [PSCustomObject]@{ applications = [PSCustomObject]@{ InstallA = $true } } }
+    }
+
+    It 'Install-PhoenixApplications installs nothing and returns the failing preflight results when unsafe' {
+        Mock -ModuleName Installer Get-PhoenixPreflightState { $script:UnsafeState }
+        Mock -ModuleName Installer Install-PhoenixApplication { throw 'should not be called' }
+
+        $results = Install-PhoenixApplications -Manifests $script:GateManifests -Configuration $script:GateConfig
+
+        @($results).Count | Should -Be 1
+        $results[0].Category | Should -Be 'InstallerPreflight'
+        $results[0].Status | Should -Be 'FAIL'
+        Should -Invoke -ModuleName Installer Install-PhoenixApplication -Times 0
+    }
+
+    It 'Install-PhoenixApplications proceeds when preflight is safe' {
+        Mock -ModuleName Installer Get-PhoenixPreflightState { $script:SafeState }
+        Mock -ModuleName Installer Install-PhoenixApplication {
+            param($Manifest, $MaxAttempts)
+            [PSCustomObject]@{ Category = 'Application'; Name = $Manifest.Name; Status = 'PASS'; Message = 'mocked' }
+        }
+
+        $results = Install-PhoenixApplications -Manifests $script:GateManifests -Configuration $script:GateConfig
+
+        $results[0].Category | Should -Be 'Application'
+        Should -Invoke -ModuleName Installer Get-PhoenixPreflightState -Times 1
+    }
+
+    It 'Install-PhoenixApplications -SkipPreflight bypasses the gate entirely' {
+        Mock -ModuleName Installer Get-PhoenixPreflightState { throw 'should not be called' }
+        Mock -ModuleName Installer Install-PhoenixApplication {
+            param($Manifest, $MaxAttempts)
+            [PSCustomObject]@{ Category = 'Application'; Name = $Manifest.Name; Status = 'PASS'; Message = 'mocked' }
+        }
+
+        $results = Install-PhoenixApplications -Manifests $script:GateManifests -Configuration $script:GateConfig -SkipPreflight
+
+        $results[0].Category | Should -Be 'Application'
+        Should -Invoke -ModuleName Installer Get-PhoenixPreflightState -Times 0
+    }
+
+    It 'Invoke-PhoenixProfile installs nothing and returns the failing preflight results when unsafe' {
+        Mock -ModuleName Installer Get-PhoenixPreflightState { $script:UnsafeState }
+        Mock -ModuleName Installer Install-PhoenixApplication { throw 'should not be called' }
+
+        $results = Invoke-PhoenixProfile -ProfileName 'Gaming' -RootPath (Resolve-Path "$PSScriptRoot/..")
+
+        @($results).Count | Should -Be 1
+        $results[0].Category | Should -Be 'InstallerPreflight'
+        Should -Invoke -ModuleName Installer Install-PhoenixApplication -Times 0
     }
 }

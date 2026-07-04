@@ -1,0 +1,9 @@
+{
+  "Name": "Dark mode (apps)",
+  "Type": "Registry",
+  "ConfigFlag": "windows.DarkMode",
+  "Path": "HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize",
+  "ValueName": "AppsUseLightTheme",
+  "DesiredValue": 0,
+  "ValueKind": "DWord"
+}

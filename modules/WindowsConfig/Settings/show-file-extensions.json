@@ -1,0 +1,9 @@
+{
+  "Name": "Show file extensions",
+  "Type": "Registry",
+  "ConfigFlag": "windows.ShowFileExtensions",
+  "Path": "HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Advanced",
+  "ValueName": "HideFileExt",
+  "DesiredValue": 0,
+  "ValueKind": "DWord"
+}

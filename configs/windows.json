@@ -1,5 +1,6 @@
 {
   "DisableTelemetry": true,
   "ShowFileExtensions": true,
+  "ShowHiddenFiles": true,
   "DarkMode": true
 }

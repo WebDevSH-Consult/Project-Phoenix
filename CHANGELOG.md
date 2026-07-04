@@ -4,6 +4,32 @@ All notable changes to this project are documented in this file. Format follows 
 
 ## [Unreleased]
 
+## [0.8.0] - Configuration, Reporting & Hardening
+
+Completes the numbered roadmap (Windows Configuration 0.8, Health Dashboard 0.9) and adds the production-hardening layer: Hardware Detection, the Installer Preflight safety gate, and the Elevation strategy.
+
+### Added
+- Elevation strategy (ADR [0013](docs/adr/0013-elevation-strategy.md)): detect and declare, never auto-elevate. `Test-PhoenixElevated` in `PhoenixCore`; setting manifests gain optional `RequiresElevation`; `Set-PhoenixSetting` checks desired state first (reads need no rights, so idempotent skips still `PASS`), then skips actual changes with a clear `WARN` + "re-run elevated" when rights are missing. `Bootstrap.ps1` states its elevation up front.
+- First machine-scope setting: telemetry minimization (`HKLM` `DataCollection\AllowTelemetry = 1`), finally putting `windows.DisableTelemetry` to work. (`1` is the effective minimum on Windows Pro; `0` applies only to Enterprise/Education.)
+- Pester tests covering `RequiresElevation` parsing/default, the WARN-skip (write never attempted), already-desired `PASS` without rights, and normal application when elevated.
+- Installer Preflight safety gate (ADR [0012](docs/adr/0012-installer-preflight-gate.md)): one universal rule — no system-level installation runs on a non-idle Windows servicing state. `modules/Validation` gains `Test-PhoenixPendingReboot`, `Test-PhoenixPendingFileOperations`, `Test-PhoenixActiveInstaller`, and the aggregate `Get-PhoenixPreflightState`; `Install-PhoenixApplications` and `Invoke-PhoenixProfile` run the gate before touching anything and install nothing on `FAIL`, returning the preflight results into the deployment report with a clear recommended action (`-SkipPreflight` is the explicit escape hatch). Motivated by the real-world AMD Error 206 failure class; applies equally to WinGet, MSI, and EXE.
+- Pester tests covering every preflight signal (CBS/WU reboot keys, pending file operations with component parsing, MSI mutex) and the gate behaviour at both entry points (blocks, proceeds, bypasses).
+- `modules/HardwareDetection`: the Hardware Detection Engine (ADR [0011](docs/adr/0011-hardware-detection-engine.md)). `Get-PhoenixHardware` returns one authoritative object — CPU (name/vendor/cores), GPUs, memory, system form factor (laptop/desktop), virtual-machine detection, motherboard, OS, TPM state, Secure Boot state, disks, network adapters — detected via mockable CIM wrappers, never assumed; inaccessible states report `Unknown`. Orchestrated at `RunOrder: 20` (detect before configuring/installing) with detection results surfaced into the deployment report, and consumable directly by any module.
+- Deployment reports now carry the full hardware summary (CPU, memory, system, TPM, Secure Boot) instead of GPUs only.
+- Pester tests covering vendor identification (AMD/NVIDIA/Intel/Unknown for both CPU and GPU), laptop chassis classification, VM detection, graceful degradation when CIM returns nothing, a real-machine integration sanity check, and the orchestrated lifecycle.
+
+### Changed
+- `Get-PhoenixGpuInfo` moved from `modules/Validation` to `modules/HardwareDetection`, its canonical home — detection is a hardware concern; Validation's `Test-PhoenixGpu` (the *check*) now consumes it. `Dashboard` imports `HardwareDetection` instead of `Validation`.
+- `modules/Dashboard`: the Health Dashboard (Roadmap 0.9). Every `Bootstrap.ps1` run now ends with a timestamped HTML + JSON deployment report under `reports/` (gitignored, like `logs/`): machine metadata, Phoenix version, git commit, GPU summary, run duration, per-module health, per-item details, and derived failure/warning counts. Engine module called by `Bootstrap.ps1` after orchestration — not orchestrated itself, since the report summarizes results that only exist once orchestration finishes. See ADR [0010](docs/adr/0010-health-dashboard-reporting.md).
+- `modules/PhoenixCore`: `Invoke-PhoenixModuleLifecycle` gained an optional `GetDetails` scriptblock — modules surface per-item results (installs, settings with previous values, validation checks) onto the health object's new `Details` property. Purely additive; a `GetDetails` failure degrades to a logged warning, never a module failure. Installer, WindowsConfig, and Validation opt in.
+- Pester tests covering the `Details` channel (attach, absent, throwing) and report generation (file output, JSON round-trip, failure/warning counting, HTML rendering with untrusted-text encoding).
+- `modules/WindowsConfig`: the Windows Configuration Engine (Roadmap 0.8). Every Windows setting is a JSON manifest under `modules/WindowsConfig/Settings/`, mirroring the Installer's design: config-flag gated, idempotent (reads current state first, skips if already desired), records the previous value as rollback data, and re-reads after writing to verify. First mechanism is Registry (HKCU only — no elevation required); ships settings for file extensions, hidden files, and dark mode, finally making `configs/windows.json`'s flags do something. Orchestrated at `RunOrder: 40` (before the Installer). See ADR [0009](docs/adr/0009-windows-configuration-engine.md).
+- `configs/windows.json` gained `ShowHiddenFiles`.
+- Pester tests covering setting-manifest discovery/validation, applied-state detection, apply/verify/failure flows (registry access fully mocked), config gating, and the orchestrated lifecycle.
+
+### Changed
+- `Get-PhoenixConfigValue` moved from `modules/Installer` to its canonical home in `modules/PhoenixConfig` — both Installer and WindowsConfig gate manifests on configuration dot-paths, and it is a configuration concern. `Installer` now imports `PhoenixConfig` at module load.
+
 ## [0.7.0] - Application Deployment Platform
 
 Covers Roadmap milestones 0.4 through 0.7 (Configuration Engine, Bootstrap Engine, Application Deployment Engine, Workstation Profiles) plus the first slice of EPIC-04 (System Validation).
