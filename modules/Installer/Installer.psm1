@@ -122,6 +122,57 @@ function Install-PhoenixExePackage {
     return ($exitCode -eq 0)
 }
 
+function Update-PhoenixWinGetPackage {
+    <#
+        .SYNOPSIS
+        Upgrades a package by WinGet package ID (`winget upgrade`).
+    #>
+    [CmdletBinding()]
+    [OutputType([bool])]
+    param(
+        [Parameter(Mandatory)]
+        [string]$PackageId
+    )
+
+    $exitCode = Invoke-PhoenixWinGet -ArgumentList @('upgrade', '--id', $PackageId, '--exact', '--silent', '--accept-package-agreements', '--accept-source-agreements')
+    return ($exitCode -eq 0)
+}
+
+function Uninstall-PhoenixWinGetPackage {
+    <#
+        .SYNOPSIS
+        Uninstalls a package by WinGet package ID (`winget uninstall`).
+    #>
+    [CmdletBinding()]
+    [OutputType([bool])]
+    param(
+        [Parameter(Mandatory)]
+        [string]$PackageId
+    )
+
+    $exitCode = Invoke-PhoenixWinGet -ArgumentList @('uninstall', '--id', $PackageId, '--exact', '--silent')
+    return ($exitCode -eq 0)
+}
+
+function Uninstall-PhoenixMsiPackage {
+    <#
+        .SYNOPSIS
+        Uninstalls an MSI package silently (`msiexec /x`).
+
+        .DESCRIPTION
+        Exit code 3010 (success, reboot required) is treated as success.
+    #>
+    [CmdletBinding()]
+    [OutputType([bool])]
+    param(
+        [Parameter(Mandatory)]
+        [string]$Path
+    )
+
+    $exitCode = Invoke-PhoenixMsiExec -ArgumentList @('/x', "`"$Path`"", '/quiet', '/norestart')
+    return ($exitCode -eq 0 -or $exitCode -eq 3010)
+}
+
 #endregion
 
 #region Manifest discovery
@@ -257,8 +308,21 @@ function Install-PhoenixApplication {
         [Parameter(Mandatory)]
         [PSCustomObject]$Manifest,
 
-        [int]$MaxAttempts = 2
+        [int]$MaxAttempts = 2,
+
+        # Preview only: report what would happen, invoke no backend (ADR 0014).
+        [switch]$DryRun
     )
+
+    if ($DryRun) {
+        if (Test-PhoenixApplicationSatisfied -Manifest $Manifest) {
+            Write-PhoenixLog -Level INFO -Message "[Installer] $($Manifest.Name): DRY RUN - already installed, no action would be taken."
+            return [PSCustomObject]@{ Category = 'Application'; Name = $Manifest.Name; Status = 'PASS'; Message = 'DRY RUN: already installed - no action would be taken.' }
+        }
+        $target = if ($Manifest.Installer -eq 'Winget') { "WinGet ($($Manifest.Id))" } else { "$($Manifest.Installer) ($($Manifest.Source))" }
+        Write-PhoenixLog -Level WARNING -Message "[Installer] $($Manifest.Name): DRY RUN - would install via $target."
+        return [PSCustomObject]@{ Category = 'Application'; Name = $Manifest.Name; Status = 'WARN'; Message = "DRY RUN: would install via $target." }
+    }
 
     if (Test-PhoenixApplicationSatisfied -Manifest $Manifest) {
         Write-PhoenixLog -Level SUCCESS -Message "[Installer] $($Manifest.Name): already installed."
@@ -287,6 +351,89 @@ function Install-PhoenixApplication {
     return [PSCustomObject]@{ Category = 'Application'; Name = $Manifest.Name; Status = 'FAIL'; Message = "Failed to install after $MaxAttempts attempt(s)." }
 }
 
+function Update-PhoenixApplication {
+    <#
+        .SYNOPSIS
+        Upgrades an already-installed application (ADR 0014).
+
+        .DESCRIPTION
+        WinGet is fully supported. A not-installed application reports WARN
+        (nothing to upgrade); non-WinGet backends report WARN (upgrade not
+        supported), never a silent no-op. Operator-invoked - not part of the
+        orchestrated bootstrap run.
+    #>
+    [CmdletBinding()]
+    [OutputType([PSCustomObject])]
+    param(
+        [Parameter(Mandatory)]
+        [PSCustomObject]$Manifest
+    )
+
+    if ($Manifest.Installer -ne 'Winget') {
+        Write-PhoenixLog -Level WARNING -Message "[Installer] $($Manifest.Name): upgrade not supported for the $($Manifest.Installer) backend."
+        return [PSCustomObject]@{ Category = 'Application'; Name = $Manifest.Name; Status = 'WARN'; Message = "Upgrade not supported for the $($Manifest.Installer) backend." }
+    }
+
+    if (-not (Test-PhoenixApplicationSatisfied -Manifest $Manifest)) {
+        Write-PhoenixLog -Level WARNING -Message "[Installer] $($Manifest.Name): not installed - nothing to upgrade."
+        return [PSCustomObject]@{ Category = 'Application'; Name = $Manifest.Name; Status = 'WARN'; Message = 'Not installed - nothing to upgrade (use install).' }
+    }
+
+    Write-PhoenixLog -Level INFO -Message "[Installer] $($Manifest.Name): upgrading via WinGet..."
+    if (Update-PhoenixWinGetPackage -PackageId $Manifest.Id) {
+        Write-PhoenixLog -Level SUCCESS -Message "[Installer] $($Manifest.Name): upgraded (or already current)."
+        return [PSCustomObject]@{ Category = 'Application'; Name = $Manifest.Name; Status = 'PASS'; Message = 'Upgraded (or already at the latest version).' }
+    }
+
+    Write-PhoenixLog -Level ERROR -Message "[Installer] $($Manifest.Name): upgrade failed."
+    return [PSCustomObject]@{ Category = 'Application'; Name = $Manifest.Name; Status = 'FAIL'; Message = 'Upgrade failed.' }
+}
+
+function Uninstall-PhoenixApplication {
+    <#
+        .SYNOPSIS
+        Removes an application and verifies it is actually gone afterward
+        (ADR 0014).
+
+        .DESCRIPTION
+        WinGet and MSI are supported; EXE reports WARN (no standard silent
+        uninstall path). Uninstalling a not-installed application is
+        idempotent (PASS - nothing to do). Operator-invoked - not part of
+        the orchestrated bootstrap run.
+    #>
+    [CmdletBinding()]
+    [OutputType([PSCustomObject])]
+    param(
+        [Parameter(Mandatory)]
+        [PSCustomObject]$Manifest
+    )
+
+    if (-not (Test-PhoenixApplicationSatisfied -Manifest $Manifest)) {
+        Write-PhoenixLog -Level SUCCESS -Message "[Installer] $($Manifest.Name): not installed - nothing to uninstall."
+        return [PSCustomObject]@{ Category = 'Application'; Name = $Manifest.Name; Status = 'PASS'; Message = 'Not installed - nothing to uninstall.' }
+    }
+
+    if ($Manifest.Installer -eq 'EXE') {
+        Write-PhoenixLog -Level WARNING -Message "[Installer] $($Manifest.Name): uninstall not supported for the EXE backend."
+        return [PSCustomObject]@{ Category = 'Application'; Name = $Manifest.Name; Status = 'WARN'; Message = 'Uninstall not supported for the EXE backend.' }
+    }
+
+    Write-PhoenixLog -Level INFO -Message "[Installer] $($Manifest.Name): uninstalling via $($Manifest.Installer)..."
+    $backendSucceeded = switch ($Manifest.Installer) {
+        'Winget' { Uninstall-PhoenixWinGetPackage -PackageId $Manifest.Id }
+        'MSI' { Uninstall-PhoenixMsiPackage -Path $Manifest.Source }
+        default { throw "Unknown installer backend '$($Manifest.Installer)' for '$($Manifest.Name)'." }
+    }
+
+    if ($backendSucceeded -and -not (Test-PhoenixApplicationSatisfied -Manifest $Manifest)) {
+        Write-PhoenixLog -Level SUCCESS -Message "[Installer] $($Manifest.Name): uninstalled and verified."
+        return [PSCustomObject]@{ Category = 'Application'; Name = $Manifest.Name; Status = 'PASS'; Message = 'Uninstalled successfully.' }
+    }
+
+    Write-PhoenixLog -Level ERROR -Message "[Installer] $($Manifest.Name): uninstall did not remove the application."
+    return [PSCustomObject]@{ Category = 'Application'; Name = $Manifest.Name; Status = 'FAIL'; Message = 'Uninstall did not remove the application.' }
+}
+
 function Install-PhoenixApplications {
     <#
         .SYNOPSIS
@@ -311,10 +458,14 @@ function Install-PhoenixApplications {
         # Escape hatch for the preflight safety gate (ADR 0012). Off by
         # default: no system-level installation runs on a non-idle Windows
         # servicing state.
-        [switch]$SkipPreflight
+        [switch]$SkipPreflight,
+
+        # Preview only: report what would happen, invoke no backend (ADR 0014).
+        # A dry run changes nothing, so it also skips the preflight gate.
+        [switch]$DryRun
     )
 
-    if (-not $SkipPreflight) {
+    if (-not $DryRun -and -not $SkipPreflight) {
         $preflight = Get-PhoenixPreflightState
         if (-not $preflight.Safe) {
             Write-PhoenixLog -Level ERROR -Message '[Installer] Preflight failed - system is not in a safe state for installation. Nothing will be installed.'
@@ -323,13 +474,14 @@ function Install-PhoenixApplications {
     }
 
     $enabled = @($Manifests | Where-Object { Get-PhoenixConfigValue -Configuration $Configuration -Path $_.ConfigFlag })
-    Write-PhoenixLog -Level INFO -Message "[Installer] $($Manifests.Count) application manifest(s) discovered; $($enabled.Count) enabled by configuration."
+    $mode = if ($DryRun) { ' (dry run)' } else { '' }
+    Write-PhoenixLog -Level INFO -Message "[Installer] $($Manifests.Count) application manifest(s) discovered; $($enabled.Count) enabled by configuration$mode."
 
     $ordered = Resolve-PhoenixModuleOrder -Manifests $enabled
 
     return @(
         foreach ($manifest in $ordered) {
-            Install-PhoenixApplication -Manifest $manifest
+            Install-PhoenixApplication -Manifest $manifest -DryRun:$DryRun
         }
     )
 }
@@ -490,7 +642,11 @@ function Invoke-PhoenixProfile {
         # Escape hatch for the preflight safety gate (ADR 0012). Off by
         # default: no system-level installation runs on a non-idle Windows
         # servicing state.
-        [switch]$SkipPreflight
+        [switch]$SkipPreflight,
+
+        # Preview only: report what the profile would install, invoke no
+        # backend (ADR 0014). Skips the preflight gate - nothing changes.
+        [switch]$DryRun
     )
 
     Import-Module (Join-Path $PSScriptRoot '..\Validation\Validation.psd1') -Force
@@ -500,7 +656,7 @@ function Invoke-PhoenixProfile {
         $RootPath = Resolve-Path (Join-Path $PSScriptRoot '..\..')
     }
 
-    if (-not $SkipPreflight) {
+    if (-not $DryRun -and -not $SkipPreflight) {
         $preflight = Get-PhoenixPreflightState
         if (-not $preflight.Safe) {
             Write-PhoenixLog -Level ERROR -Message "[Installer] Preflight failed - system is not in a safe state for installation. Profile '$ProfileName' will not be applied."
@@ -509,7 +665,8 @@ function Invoke-PhoenixProfile {
     }
 
     $workstationProfile = Get-PhoenixProfile -ProfilesPath (Join-Path $RootPath 'profiles') -ProfileName $ProfileName
-    Write-PhoenixLog -Level INFO -Message "[Installer] Applying profile '$($workstationProfile.Name)': $($workstationProfile.Applications -join ', ')"
+    $mode = if ($DryRun) { ' (dry run)' } else { '' }
+    Write-PhoenixLog -Level INFO -Message "[Installer] Applying profile '$($workstationProfile.Name)'$mode`: $($workstationProfile.Applications -join ', ')"
 
     $manifests = Get-PhoenixApplicationManifest -ManifestsPath (Join-Path $PSScriptRoot 'Applications')
     $selected = Expand-PhoenixProfileApplications -Manifests $manifests -ApplicationNames $workstationProfile.Applications
@@ -517,7 +674,7 @@ function Invoke-PhoenixProfile {
 
     $results = @(
         foreach ($manifest in $ordered) {
-            Install-PhoenixApplication -Manifest $manifest -MaxAttempts $MaxAttempts
+            Install-PhoenixApplication -Manifest $manifest -MaxAttempts $MaxAttempts -DryRun:$DryRun
         }
     )
 
@@ -573,4 +730,4 @@ function Get-InstallerModuleDefinition {
 
 #endregion
 
-Export-ModuleMember -Function Get-PhoenixApplicationManifest, Test-PhoenixApplicationSatisfied, Install-PhoenixWinGetPackage, Install-PhoenixMsiPackage, Install-PhoenixExePackage, Install-PhoenixApplication, Install-PhoenixApplications, Get-PhoenixProfile, Expand-PhoenixProfileApplications, Invoke-PhoenixProfile, Get-InstallerModuleDefinition
+Export-ModuleMember -Function Get-PhoenixApplicationManifest, Test-PhoenixApplicationSatisfied, Install-PhoenixWinGetPackage, Install-PhoenixMsiPackage, Install-PhoenixExePackage, Update-PhoenixWinGetPackage, Uninstall-PhoenixWinGetPackage, Uninstall-PhoenixMsiPackage, Install-PhoenixApplication, Update-PhoenixApplication, Uninstall-PhoenixApplication, Install-PhoenixApplications, Get-PhoenixProfile, Expand-PhoenixProfileApplications, Invoke-PhoenixProfile, Get-InstallerModuleDefinition
