@@ -56,7 +56,19 @@ Report      → what happened?                (Dashboard: HTML + JSON deployment
 Self-heal   → repair/retry/rollback         (where appropriate — see below)
 ```
 
-This is a deliberate architectural principle, not an accident of what got built. New modules are expected to slot into it rather than sidestep it: detect before deciding, validate before acting, gate unsafe operations, verify every change, and report the outcome in the shared `{ Category, Name, Status, Message }` vocabulary.
+### Standard: the Phoenix Deployment Lifecycle
+
+This is a project standard, not descriptive guidance. Every module implements the following stages **where applicable**:
+
+1. **Detect** — establish the relevant machine/system state (never assume it).
+2. **Validate** — confirm preconditions and desired state before acting.
+3. **Preflight** — for any system-level change, confirm it is *safe to change now*.
+4. **Execute** — perform the change, idempotently.
+5. **Verify** — confirm the change actually took effect.
+6. **Report** — return the outcome in the shared `{ Category, Name, Status, Message }` vocabulary.
+7. **Self-Heal** — repair / retry / rollback where a safe remediation exists (optional, but preferred).
+
+A module **may omit stages that do not apply** to it — a read-only reporting module has nothing to Execute; a user-scope setting needs no Preflight. But a module **must never bypass Validate or Verify**: Phoenix does not make changes it hasn't confirmed are needed, nor claims success it hasn't confirmed. New modules slot into this sequence rather than sidestep it.
 
 **Self-heal** is the maturing stage. Modules already capture what they need for it — WindowsConfig records each setting's `PreviousValue` (rollback data), the Installer retries with re-validation, and the preflight gate blocks known-unsafe states. Consolidating these into a consistent `Detect → Repair → Retry → Rollback → Verify` capability across modules is the [EPIC-04](./docs/roadmap/EPIC-04-System-Validation.md) self-healing goal and the core of the production-hardening phase toward v1.0.
 

@@ -30,7 +30,7 @@ Workstation provisioning build-out (Roadmap 0.1–0.9 complete, working toward 1
 
 ## Repository Health
 - Core roadmap (0.1–0.9) complete, plus Hardware Detection, the Installer Preflight gate, and the Elevation strategy.
-- Phase has shifted from feature development to **production hardening**: installer completeness, recovery/rollback, and v1.0 readiness. The goal now is that every module consistently follows the deployment pipeline (Detect → Validate → Preflight → Execute → Verify → Report, plus Self-heal where appropriate — see ARCHITECTURE.md), not that more modules exist.
+- Phase has shifted from feature development to **production hardening**: installer completeness, recovery/rollback, and v1.0 readiness. The goal now is that every module consistently follows the Phoenix Deployment Lifecycle — now a formal project standard in [ARCHITECTURE.md](ARCHITECTURE.md#standard-the-phoenix-deployment-lifecycle) and [CONTRIBUTING.md](CONTRIBUTING.md#module-standards) — not that more modules exist.
 - EPIC-04 (System Validation & Self-Healing) in progress alongside the versioned milestones.
 
 ## Blockers
@@ -40,7 +40,7 @@ Workstation provisioning build-out (Roadmap 0.1–0.9 complete, working toward 1
 - v0.7.0 tagged and released: https://github.com/WebDevSH-Consult/Project-Phoenix/releases/tag/v0.7.0
 - Repository is public; branch rulesets active on `main`/`develop` (PR required, 5 CI checks required, no force-push/deletion).
 - CI passing on `develop` HEAD.
-- Repository Metrics below are computed by hand (`find`/`grep` counts) at the end of each session — no automated script generates them yet. Worth automating once it becomes tedious.
+- Repository Metrics below are computed by hand (`find`/`grep` counts) at the end of each session. **Post-v1.0 candidate:** have Phoenix generate these itself — either a CI step or a small addition to the Health Dashboard — so the numbers are always accurate and never drift. Deliberately deferred: it's a quality-of-life improvement, not v1.0-blocking.
 - WindowsConfig now supports HKLM via the elevation strategy (ADR 0013): machine-scope settings apply when Bootstrap runs elevated, skip with a clear WARN otherwise. `DisableTelemetry` is live. Windows Features and service configuration remain future manifest `Type`s.
 - New engineering standing rules adopted this week: detect hardware before deciding, never assume AMD/NVIDIA or Store packages, validate every installation, tests for every deployment module, prefer self-healing over documentation.
 
