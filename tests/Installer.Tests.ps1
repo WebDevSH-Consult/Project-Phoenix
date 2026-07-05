@@ -711,3 +711,41 @@ Describe 'Installer completeness: new backend wrappers (ADR 0014)' {
         Uninstall-PhoenixMsiPackage -Path 'C:\fake.msi' | Should -Be $true
     }
 }
+
+Describe 'Install-PhoenixApplication Changed flag (ADR 0015 contract)' {
+    BeforeAll {
+        Import-Module "$PSScriptRoot/../modules/PhoenixLogging/PhoenixLogging.psd1" -Force
+        Import-Module "$PSScriptRoot/../modules/Validation/Validation.psd1" -Force
+        Import-Module "$PSScriptRoot/../modules/Installer/Installer.psd1" -Force
+        Initialize-PhoenixLog -LogDirectory (Join-Path $TestDrive 'logs')
+
+        $script:M = [PSCustomObject]@{ Name = 'App'; Installer = 'Winget'; Id = 'A.Id'; Source = $null; Validate = @([PSCustomObject]@{ Type = 'Command'; Value = 'x' }) }
+    }
+
+    It 'marks Changed = $true only on a verified install' {
+        $script:Installed = $false
+        Mock -ModuleName Installer Test-PhoenixApplicationSatisfied { $script:Installed }
+        Mock -ModuleName Installer Invoke-PhoenixWinGet { $script:Installed = $true; return 0 }
+
+        (Install-PhoenixApplication -Manifest $script:M).Changed | Should -Be $true
+    }
+
+    It 'marks Changed = $false when already installed (skip)' {
+        Mock -ModuleName Installer Test-PhoenixApplicationSatisfied { $true }
+
+        (Install-PhoenixApplication -Manifest $script:M).Changed | Should -Be $false
+    }
+
+    It 'marks Changed = $false on a dry run' {
+        Mock -ModuleName Installer Test-PhoenixApplicationSatisfied { $false }
+
+        (Install-PhoenixApplication -Manifest $script:M -DryRun).Changed | Should -Be $false
+    }
+
+    It 'marks Changed = $false when the install fails' {
+        Mock -ModuleName Installer Test-PhoenixApplicationSatisfied { $false }
+        Mock -ModuleName Installer Invoke-PhoenixWinGet { 1 }
+
+        (Install-PhoenixApplication -Manifest $script:M -MaxAttempts 1).Changed | Should -Be $false
+    }
+}
