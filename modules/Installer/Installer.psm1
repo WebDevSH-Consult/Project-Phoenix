@@ -317,16 +317,16 @@ function Install-PhoenixApplication {
     if ($DryRun) {
         if (Test-PhoenixApplicationSatisfied -Manifest $Manifest) {
             Write-PhoenixLog -Level INFO -Message "[Installer] $($Manifest.Name): DRY RUN - already installed, no action would be taken."
-            return [PSCustomObject]@{ Category = 'Application'; Name = $Manifest.Name; Status = 'PASS'; Message = 'DRY RUN: already installed - no action would be taken.' }
+            return [PSCustomObject]@{ Category = 'Application'; Name = $Manifest.Name; Status = 'PASS'; Message = 'DRY RUN: already installed - no action would be taken.'; Changed = $false }
         }
         $target = if ($Manifest.Installer -eq 'Winget') { "WinGet ($($Manifest.Id))" } else { "$($Manifest.Installer) ($($Manifest.Source))" }
         Write-PhoenixLog -Level WARNING -Message "[Installer] $($Manifest.Name): DRY RUN - would install via $target."
-        return [PSCustomObject]@{ Category = 'Application'; Name = $Manifest.Name; Status = 'WARN'; Message = "DRY RUN: would install via $target." }
+        return [PSCustomObject]@{ Category = 'Application'; Name = $Manifest.Name; Status = 'WARN'; Message = "DRY RUN: would install via $target."; Changed = $false }
     }
 
     if (Test-PhoenixApplicationSatisfied -Manifest $Manifest) {
         Write-PhoenixLog -Level SUCCESS -Message "[Installer] $($Manifest.Name): already installed."
-        return [PSCustomObject]@{ Category = 'Application'; Name = $Manifest.Name; Status = 'PASS'; Message = 'Already installed - no action taken.' }
+        return [PSCustomObject]@{ Category = 'Application'; Name = $Manifest.Name; Status = 'PASS'; Message = 'Already installed - no action taken.'; Changed = $false }
     }
 
     for ($attempt = 1; $attempt -le $MaxAttempts; $attempt++) {
@@ -341,14 +341,14 @@ function Install-PhoenixApplication {
 
         if ($backendSucceeded -and (Test-PhoenixApplicationSatisfied -Manifest $Manifest)) {
             Write-PhoenixLog -Level SUCCESS -Message "[Installer] $($Manifest.Name): installed and validated (attempt $attempt)."
-            return [PSCustomObject]@{ Category = 'Application'; Name = $Manifest.Name; Status = 'PASS'; Message = "Installed successfully on attempt $attempt." }
+            return [PSCustomObject]@{ Category = 'Application'; Name = $Manifest.Name; Status = 'PASS'; Message = "Installed successfully on attempt $attempt."; Changed = $true }
         }
 
         Write-PhoenixLog -Level WARNING -Message "[Installer] $($Manifest.Name): attempt $attempt failed or post-install validation did not pass."
     }
 
     Write-PhoenixLog -Level ERROR -Message "[Installer] $($Manifest.Name): failed to install after $MaxAttempts attempt(s)."
-    return [PSCustomObject]@{ Category = 'Application'; Name = $Manifest.Name; Status = 'FAIL'; Message = "Failed to install after $MaxAttempts attempt(s)." }
+    return [PSCustomObject]@{ Category = 'Application'; Name = $Manifest.Name; Status = 'FAIL'; Message = "Failed to install after $MaxAttempts attempt(s)."; Changed = $false }
 }
 
 function Update-PhoenixApplication {

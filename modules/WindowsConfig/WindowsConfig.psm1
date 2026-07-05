@@ -68,6 +68,27 @@ function Set-PhoenixRegistryValue {
     New-ItemProperty -Path $Path -Name $ValueName -Value $Value -PropertyType $ValueKind -Force | Out-Null
 }
 
+function Remove-PhoenixRegistryValue {
+    <#
+        .SYNOPSIS
+        Removes a single registry value if present. Thin and mockable - tests
+        never touch the registry. Used by the Recovery engine (ADR 0015) to
+        roll back a setting Phoenix introduced (previous value was unset).
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [string]$Path,
+
+        [Parameter(Mandatory)]
+        [string]$ValueName
+    )
+
+    if (Test-Path -LiteralPath $Path) {
+        Remove-ItemProperty -Path $Path -Name $ValueName -Force -ErrorAction SilentlyContinue
+    }
+}
+
 #endregion
 
 #region Setting manifest discovery
@@ -192,14 +213,14 @@ function Set-PhoenixSetting {
 
     if ($null -ne $previous -and "$previous" -eq "$($Manifest.DesiredValue)") {
         Write-PhoenixLog -Level SUCCESS -Message "[WindowsConfig] $($Manifest.Name): already in desired state."
-        return [PSCustomObject]@{ Category = 'Setting'; Name = $Manifest.Name; Status = 'PASS'; Message = 'Already in desired state - no action taken.'; PreviousValue = $previous }
+        return [PSCustomObject]@{ Category = 'Setting'; Name = $Manifest.Name; Status = 'PASS'; Message = 'Already in desired state - no action taken.'; PreviousValue = $previous; Changed = $false }
     }
 
     # Elevation gate (ADR 0013): reads worked above, so the idempotent skip
     # still applies without rights; only an actual change needs elevation.
     if ($Manifest.RequiresElevation -and -not (Test-PhoenixElevated)) {
         Write-PhoenixLog -Level WARNING -Message "[WindowsConfig] $($Manifest.Name): requires elevation - not applied. Run Bootstrap from an elevated PowerShell to apply."
-        return [PSCustomObject]@{ Category = 'Setting'; Name = $Manifest.Name; Status = 'WARN'; Message = 'Requires elevation - not applied. Run Bootstrap from an elevated PowerShell to apply.'; PreviousValue = $previous }
+        return [PSCustomObject]@{ Category = 'Setting'; Name = $Manifest.Name; Status = 'WARN'; Message = 'Requires elevation - not applied. Run Bootstrap from an elevated PowerShell to apply.'; PreviousValue = $previous; Changed = $false }
     }
 
     $previousDisplay = if ($null -eq $previous) { '(unset)' } else { $previous }
@@ -210,16 +231,16 @@ function Set-PhoenixSetting {
     }
     catch {
         Write-PhoenixLog -Level ERROR -Message "[WindowsConfig] $($Manifest.Name): failed to apply - $($_.Exception.Message)"
-        return [PSCustomObject]@{ Category = 'Setting'; Name = $Manifest.Name; Status = 'FAIL'; Message = "Failed to apply: $($_.Exception.Message)"; PreviousValue = $previous }
+        return [PSCustomObject]@{ Category = 'Setting'; Name = $Manifest.Name; Status = 'FAIL'; Message = "Failed to apply: $($_.Exception.Message)"; PreviousValue = $previous; Changed = $false }
     }
 
     if (Test-PhoenixSettingApplied -Manifest $Manifest) {
         Write-PhoenixLog -Level SUCCESS -Message "[WindowsConfig] $($Manifest.Name): applied and verified."
-        return [PSCustomObject]@{ Category = 'Setting'; Name = $Manifest.Name; Status = 'PASS'; Message = "Applied (previous value: $previousDisplay)."; PreviousValue = $previous }
+        return [PSCustomObject]@{ Category = 'Setting'; Name = $Manifest.Name; Status = 'PASS'; Message = "Applied (previous value: $previousDisplay)."; PreviousValue = $previous; Changed = $true }
     }
 
     Write-PhoenixLog -Level ERROR -Message "[WindowsConfig] $($Manifest.Name): applied but post-apply verification did not confirm the desired state."
-    return [PSCustomObject]@{ Category = 'Setting'; Name = $Manifest.Name; Status = 'FAIL'; Message = 'Applied but post-apply verification failed.'; PreviousValue = $previous }
+    return [PSCustomObject]@{ Category = 'Setting'; Name = $Manifest.Name; Status = 'FAIL'; Message = 'Applied but post-apply verification failed.'; PreviousValue = $previous; Changed = $false }
 }
 
 function Set-PhoenixSettings {
@@ -284,4 +305,4 @@ function Get-WindowsConfigModuleDefinition {
 
 #endregion
 
-Export-ModuleMember -Function Get-PhoenixRegistryValue, Set-PhoenixRegistryValue, Get-PhoenixSettingManifest, Test-PhoenixSettingApplied, Set-PhoenixSetting, Set-PhoenixSettings, Get-WindowsConfigModuleDefinition
+Export-ModuleMember -Function Get-PhoenixRegistryValue, Set-PhoenixRegistryValue, Remove-PhoenixRegistryValue, Get-PhoenixSettingManifest, Test-PhoenixSettingApplied, Set-PhoenixSetting, Set-PhoenixSettings, Get-WindowsConfigModuleDefinition
