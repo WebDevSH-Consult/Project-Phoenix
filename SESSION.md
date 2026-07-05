@@ -18,14 +18,16 @@ Workstation provisioning build-out (Roadmap 0.1–0.9 complete, working toward 1
 - Installer Preflight safety gate: preflight checks in `modules/Validation` (`Get-PhoenixPreflightState` — pending reboot, `PendingFileRenameOperations`, active MSI session), gating `Install-PhoenixApplications` and `Invoke-PhoenixProfile` (nothing installs on `FAIL`; `-SkipPreflight` escape hatch). Validated against the live machine: it caught 21 real pending file operations including the AMD Adrenalin installer — the exact Error 206 scenario it was built to prevent. ADR [0012](docs/adr/0012-installer-preflight-gate.md).
 - Elevation strategy: detect-and-declare, never auto-elevate (`Test-PhoenixElevated` in PhoenixCore; `RequiresElevation` manifest field; WARN-skip with "re-run elevated" when rights are missing; idempotent PASS still works non-elevated since reads need no rights). First machine-scope setting shipped: telemetry minimization — `windows.DisableTelemetry` finally live. ADR [0013](docs/adr/0013-elevation-strategy.md). **v0.8.0 tagged and released.**
 - Installer completeness: dry-run (`-DryRun` previews the plan, no backend, skips preflight — PASS for no-op, WARN for pending change), upgrade (`Update-PhoenixApplication`, `winget upgrade`), and uninstall (`Uninstall-PhoenixApplication`, `winget uninstall`/`msiexec /x`, verified gone; EXE unsupported). Operator-invoked; the engine is now feature-complete for v1.0. ADR [0014](docs/adr/0014-installer-completeness.md).
+- Recovery / Rollback Engine: `modules/Recovery` (`Invoke-PhoenixRollback`) reverses a deployment — restore settings to their `PreviousValue` (or remove ones Phoenix introduced), uninstall apps it installed — driven by the deployment report's confirmed changes (`Changed` flag now on setting/install results), in reverse order, each verified. The pipeline's Self-Heal stage made real. Operator-invoked. ADR [0015](docs/adr/0015-recovery-rollback-engine.md). Verified against the live registry.
 
 ## Current Task
 - None in progress — awaiting next task selection
 
 ## Next Planned Task
-- Production-hardening phase (the numbered roadmap is functionally complete; remaining work is resilience, not new modules):
-  1. Recovery / Rollback Engine — extend WindowsConfig's existing `PreviousValue` rollback data (and add equivalent capture for installs) into a `Detect → Repair → Retry → Rollback → Verify` self-healing capability. This is the EPIC-04 "self-heal" stage made real across modules.
-  2. Advanced validation slices, then the v1.0 release
+- Production-hardening phase (numbered roadmap complete; remaining work is resilience and polish toward v1.0):
+  1. Advanced validation slices (per-application checks now that installers exist; drift detection)
+  2. Automatic rollback-on-failure — build on the Recovery engine to reverse a run's changes when a later step fails (needs cross-module transactional state; deferred in ADR 0015)
+  3. Final v1.0 polish and the release
 - Also pending: decide EPIC numbering for a "Hardware Awareness" epic doc (EPIC-05 was informally used for the Application Deployment Platform; suggest EPIC-06)
 
 ## Repository Health
@@ -46,10 +48,10 @@ Workstation provisioning build-out (Roadmap 0.1–0.9 complete, working toward 1
 
 ## Current Repository Metrics
 
-Modules: 10
-Tests: 152
-PowerShell Files: 31
-Markdown Documents: 47
+Modules: 11
+Tests: 170
+PowerShell Files: 34
+Markdown Documents: 49
 GitHub Workflows: 1
 CI Status: Passing
 Open Issues: 0

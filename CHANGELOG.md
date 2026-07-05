@@ -5,6 +5,10 @@ All notable changes to this project are documented in this file. Format follows 
 ## [Unreleased]
 
 ### Added
+- Recovery / Rollback Engine (ADR [0015](docs/adr/0015-recovery-rollback-engine.md)): `modules/Recovery` reverses a deployment — the Self-Heal stage of the pipeline made real. `Invoke-PhoenixRollback` reads a deployment report, builds a plan from confirmed changes, and reverses them in reverse order (applications uninstalled first, then settings restored). `Undo-PhoenixSettingChange` restores a setting's previous value or removes it if Phoenix introduced it; `Undo-PhoenixApplicationInstall` uninstalls via the Installer — each verified. Operator-invoked, not orchestrated. Auto-rollback-on-failure is deferred (needs cross-module transactional state); this is the engine it will build on.
+- `Set-PhoenixSetting` and `Install-PhoenixApplication` results gain a `Changed` boolean (`$true` only on a verified apply/install; `$false` for skips, dry-runs, elevation-skips, and failures) — the robust signal the rollback engine filters on, and a clearer report.
+- `Remove-PhoenixRegistryValue` wrapper in `modules/WindowsConfig` (for rolling back a setting Phoenix introduced).
+- Pester coverage for setting/application reversal, plan-building (Changed filtering, missing-manifest skip, reverse ordering), and the report-driven `Invoke-PhoenixRollback`, plus the `Changed`-flag contract on both mutating modules.
 - Installer completeness (ADR [0014](docs/adr/0014-installer-completeness.md)): dry-run, upgrade, and uninstall round out the Application Deployment Engine.
   - **Dry-run**: `-DryRun` on `Install-PhoenixApplication`, `Install-PhoenixApplications`, and `Invoke-PhoenixProfile` previews the plan without invoking any backend (already satisfied → `PASS`; change pending → `WARN`) and skips the preflight gate, since a preview changes nothing.
   - **Upgrade**: `Update-PhoenixApplication` (`winget upgrade`); not-installed and non-WinGet backends report `WARN` rather than a silent no-op.
