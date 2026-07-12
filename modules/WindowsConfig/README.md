@@ -36,7 +36,7 @@ Orchestrated automatically via `module.json` at `RunOrder: 40` — the OS is con
 4. **Apply** via `Set-PhoenixRegistryValue` (creates the key if missing).
 5. **Re-read to verify.** A write that doesn't stick is `FAIL`, not assumed success.
 
-Results are `{ Category: 'Setting', Name, Status, Message, PreviousValue }` — the same vocabulary as installer and validation results.
+Results are `{ Category: 'Setting', Name, Status, Message, PreviousValue, Changed }` — the same vocabulary as installer and validation results. `Changed` is `$true` only on a verified apply (`$false` for already-desired, elevation-skip, and failure); it's the signal the [Recovery engine](../Recovery/README.md) filters on to roll back only confirmed changes, and `PreviousValue` is the rollback data. `Remove-PhoenixRegistryValue` is exported for Recovery to remove a value Phoenix introduced.
 
 ## Scope and limitations (deliberate)
 

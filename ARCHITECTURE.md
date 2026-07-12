@@ -70,7 +70,7 @@ This is a project standard, not descriptive guidance. Every module implements th
 
 A module **may omit stages that do not apply** to it — a read-only reporting module has nothing to Execute; a user-scope setting needs no Preflight. But a module **must never bypass Validate or Verify**: Phoenix does not make changes it hasn't confirmed are needed, nor claims success it hasn't confirmed. New modules slot into this sequence rather than sidestep it.
 
-**Self-heal** is the maturing stage. Modules already capture what they need for it — WindowsConfig records each setting's `PreviousValue` (rollback data), the Installer retries with re-validation, and the preflight gate blocks known-unsafe states. Consolidating these into a consistent `Detect → Repair → Retry → Rollback → Verify` capability across modules is the [EPIC-04](./docs/roadmap/EPIC-04-System-Validation.md) self-healing goal and the core of the production-hardening phase toward v1.0.
+**Self-heal** is delivered by [`modules/Recovery`](./modules/Recovery/README.md) (ADR [0015](./docs/adr/0015-recovery-rollback-engine.md)): `Invoke-PhoenixRollback` reverses a deployment — restoring settings to their previous value (or removing ones Phoenix introduced) and uninstalling applications it installed, driven by the deployment report's confirmed changes, each verified. Retry already lives in the Installer, and the preflight gate blocks known-unsafe states. Automatic rollback-on-failure within a run (cross-module transactional recovery) is the remaining [EPIC-04](./docs/roadmap/EPIC-04-System-Validation.md) work that builds on this engine.
 
 ## Health Objects
 

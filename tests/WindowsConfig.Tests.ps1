@@ -272,3 +272,34 @@ Describe 'Elevation gate (ADR 0013)' {
         Should -Invoke -ModuleName WindowsConfig Set-PhoenixRegistryValue -Times 1
     }
 }
+
+Describe 'Set-PhoenixSetting Changed flag (ADR 0015 contract)' {
+    BeforeAll {
+        Import-Module "$PSScriptRoot/../modules/PhoenixLogging/PhoenixLogging.psd1" -Force
+        Import-Module "$PSScriptRoot/../modules/WindowsConfig/WindowsConfig.psd1" -Force
+        Initialize-PhoenixLog -LogDirectory (Join-Path $TestDrive 'logs')
+
+        $script:M = [PSCustomObject]@{ Name = 'S'; Type = 'Registry'; ConfigFlag = 'windows.S'; Path = 'HKCU:\Software\T'; ValueName = 'V'; DesiredValue = 1; ValueKind = 'DWord' }
+    }
+
+    It 'marks Changed = $true only on a verified apply' {
+        $script:State = 0
+        Mock -ModuleName WindowsConfig Get-PhoenixRegistryValue { $script:State }
+        Mock -ModuleName WindowsConfig Set-PhoenixRegistryValue { $script:State = 1 }
+
+        (Set-PhoenixSetting -Manifest $script:M).Changed | Should -Be $true
+    }
+
+    It 'marks Changed = $false when already in the desired state' {
+        Mock -ModuleName WindowsConfig Get-PhoenixRegistryValue { 1 }
+
+        (Set-PhoenixSetting -Manifest $script:M).Changed | Should -Be $false
+    }
+
+    It 'marks Changed = $false when the apply fails verification' {
+        Mock -ModuleName WindowsConfig Get-PhoenixRegistryValue { 0 }
+        Mock -ModuleName WindowsConfig Set-PhoenixRegistryValue { }
+
+        (Set-PhoenixSetting -Manifest $script:M).Changed | Should -Be $false
+    }
+}

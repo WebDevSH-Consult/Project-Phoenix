@@ -5,7 +5,7 @@
     Author            = 'Project Phoenix'
     Description       = 'Windows Configuration Engine (Roadmap 0.8 / ADR 0009): manifest-driven Windows settings, Registry (HKCU) provider first. Requires PhoenixLogging to be imported first; imports PhoenixConfig itself.'
     PowerShellVersion = '7.0'
-    FunctionsToExport = @('Get-PhoenixRegistryValue', 'Set-PhoenixRegistryValue', 'Get-PhoenixSettingManifest', 'Test-PhoenixSettingApplied', 'Set-PhoenixSetting', 'Set-PhoenixSettings', 'Get-WindowsConfigModuleDefinition')
+    FunctionsToExport = @('Get-PhoenixRegistryValue', 'Set-PhoenixRegistryValue', 'Remove-PhoenixRegistryValue', 'Get-PhoenixSettingManifest', 'Test-PhoenixSettingApplied', 'Set-PhoenixSetting', 'Set-PhoenixSettings', 'Get-WindowsConfigModuleDefinition')
     CmdletsToExport   = @()
     VariablesToExport = @()
     AliasesToExport   = @()
