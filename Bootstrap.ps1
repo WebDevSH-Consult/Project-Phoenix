@@ -13,7 +13,8 @@
 #>
 [CmdletBinding()]
 param(
-    [switch]$Version
+    [switch]$Version,
+    [switch]$Plan
 )
 
 Set-StrictMode -Version Latest
@@ -25,6 +26,19 @@ if ($Version) {
     Import-Module (Join-Path $root 'modules/PhoenixLogging/PhoenixLogging.psd1') -Force
     Import-Module (Join-Path $root 'modules/PhoenixCore/PhoenixCore.psd1') -Force
     Write-Output "Project Phoenix v$((Get-PhoenixVersion -RootPath $root).Version)"
+    return
+}
+
+if ($Plan) {
+    # Review before deploy (ADR 0016): build a configuration-scoped deployment
+    # plan, show it, export it, and exit WITHOUT executing anything.
+    Import-Module (Join-Path $root 'modules/PhoenixLogging/PhoenixLogging.psd1') -Force
+    Import-Module (Join-Path $root 'modules/DeploymentPlanner/DeploymentPlanner.psd1') -Force
+    Initialize-PhoenixLog -LogDirectory (Join-Path $root 'logs')
+
+    $deploymentPlan = New-PhoenixDeploymentPlan -RootPath $root
+    Show-PhoenixDeploymentPlan -Plan $deploymentPlan
+    $null = Export-PhoenixDeploymentPlan -Plan $deploymentPlan -RootPath $root
     return
 }
 
