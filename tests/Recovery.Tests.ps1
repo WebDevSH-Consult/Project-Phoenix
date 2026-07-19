@@ -177,3 +177,60 @@ Describe 'Invoke-PhoenixRollback (ADR 0015)' {
         { Invoke-PhoenixRollback -RootPath $root } | Should -Throw '*No deployment report*'
     }
 }
+
+Describe 'Invoke-PhoenixRollbackFromResults (ADR 0017)' {
+    BeforeAll {
+        Import-Module "$PSScriptRoot/../modules/PhoenixLogging/PhoenixLogging.psd1" -Force
+        Import-Module "$PSScriptRoot/../modules/Recovery/Recovery.psd1" -Force
+        Initialize-PhoenixLog -LogDirectory (Join-Path $TestDrive 'logs')
+    }
+
+    BeforeEach {
+        Mock -ModuleName Recovery Get-PhoenixSettingManifest { @([PSCustomObject]@{ Name = 'Dark mode'; Path = 'HKCU:\Software\Themes'; ValueName = 'AppsUseLightTheme'; ValueKind = 'DWord' }) }
+        Mock -ModuleName Recovery Get-PhoenixApplicationManifest { @([PSCustomObject]@{ Name = 'Git'; Installer = 'Winget'; Id = 'Git.Git' }) }
+        Mock -ModuleName Recovery Undo-PhoenixSettingChange { [PSCustomObject]@{ Category = 'Rollback'; Name = 'Dark mode'; Status = 'PASS'; Message = 'restored' } }
+        Mock -ModuleName Recovery Undo-PhoenixApplicationInstall { [PSCustomObject]@{ Category = 'Rollback'; Name = 'Git'; Status = 'PASS'; Message = 'uninstalled' } }
+    }
+
+    It 'reverses a run''s confirmed changes directly from in-memory health results' {
+        # Exactly the shape Invoke-PhoenixOrchestration returns: health objects
+        # with a Details list carrying Changed / PreviousValue.
+        $results = @(
+            [PSCustomObject]@{ Module = 'WindowsConfig'; Status = 'Warning'; Details = @([PSCustomObject]@{ Category = 'Setting'; Name = 'Dark mode'; Status = 'PASS'; PreviousValue = 1; Changed = $true }) }
+            [PSCustomObject]@{ Module = 'Installer'; Status = 'Healthy'; Details = @([PSCustomObject]@{ Category = 'Application'; Name = 'Git'; Status = 'PASS'; Changed = $true }) }
+        )
+
+        $rollback = Invoke-PhoenixRollbackFromResults -Results $results -RootPath $TestDrive
+
+        $rollback.Count | Should -Be 2
+        # Application reversed before setting (reverse-of-application order).
+        $rollback[0].Name | Should -Be 'Git'
+        $rollback[1].Name | Should -Be 'Dark mode'
+        Should -Invoke -ModuleName Recovery Undo-PhoenixApplicationInstall -Times 1
+        Should -Invoke -ModuleName Recovery Undo-PhoenixSettingChange -Times 1
+    }
+
+    It 'reverses nothing when the run made no confirmed changes' {
+        $results = @(
+            [PSCustomObject]@{ Module = 'WindowsConfig'; Status = 'Healthy'; Details = @([PSCustomObject]@{ Category = 'Setting'; Name = 'Dark mode'; Status = 'PASS'; PreviousValue = 0; Changed = $false }) }
+        )
+
+        @(Invoke-PhoenixRollbackFromResults -Results $results -RootPath $TestDrive).Count | Should -Be 0
+        Should -Invoke -ModuleName Recovery Undo-PhoenixSettingChange -Times 0
+    }
+
+    It 'surfaces a reversal that fails rather than reporting a clean rollback' {
+        Mock -ModuleName Recovery Undo-PhoenixApplicationInstall { [PSCustomObject]@{ Category = 'Rollback'; Name = 'Git'; Status = 'FAIL'; Message = 'uninstall did not remove the application' } }
+        $results = @(
+            [PSCustomObject]@{ Module = 'Installer'; Status = 'Error'; Details = @([PSCustomObject]@{ Category = 'Application'; Name = 'Git'; Status = 'PASS'; Changed = $true }) }
+        )
+
+        $rollback = Invoke-PhoenixRollbackFromResults -Results $results -RootPath $TestDrive
+
+        @($rollback | Where-Object Status -eq 'FAIL').Count | Should -Be 1
+    }
+
+    It 'accepts an empty result set without error' {
+        { Invoke-PhoenixRollbackFromResults -Results @() -RootPath $TestDrive } | Should -Not -Throw
+    }
+}
