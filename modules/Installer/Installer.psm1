@@ -32,6 +32,27 @@ function Invoke-PhoenixWinGet {
     return $LASTEXITCODE
 }
 
+function Invoke-PhoenixWinGetUpgradeQuery {
+    <#
+        .SYNOPSIS
+        Thin, mockable, read-only wrapper around `winget upgrade` for a single
+        package. Captures output (unlike Invoke-PhoenixWinGet) so callers can
+        tell whether an upgrade is available. Changes nothing.
+    #>
+    [CmdletBinding()]
+    [OutputType([PSCustomObject])]
+    param(
+        [Parameter(Mandatory)]
+        [string]$PackageId
+    )
+
+    $output = & winget upgrade --id $PackageId --exact --accept-source-agreements 2>&1
+    return [PSCustomObject]@{
+        ExitCode = $LASTEXITCODE
+        Output   = $output -join "`n"
+    }
+}
+
 function Install-PhoenixWinGetPackage {
     <#
         .SYNOPSIS
@@ -287,6 +308,39 @@ function Test-PhoenixApplicationSatisfied {
     }
 
     return -not (@($results) | Where-Object Status -ne 'PASS')
+}
+
+function Test-PhoenixApplicationOutdated {
+    <#
+        .SYNOPSIS
+        Read-only check: does WinGet report a newer version available for this
+        (installed) application? Used by the State Engine's version-currency
+        drift domain (ADR 0018).
+
+        .DESCRIPTION
+        Only WinGet-backed applications with an Id can be checked - MSI/EXE
+        backends carry no upgrade channel Phoenix can query, so they report
+        $false (no version signal, never a fabricated one). Assumes the app is
+        installed; callers check presence first. A parse/query failure returns
+        $false so an uncertain result never invents drift. Changes nothing.
+    #>
+    [CmdletBinding()]
+    [OutputType([bool])]
+    param(
+        [Parameter(Mandatory)]
+        [PSCustomObject]$Manifest
+    )
+
+    if ($Manifest.Installer -ne 'Winget' -or -not $Manifest.Id) { return $false }
+
+    $result = Invoke-PhoenixWinGetUpgradeQuery -PackageId $Manifest.Id
+    if ($result.ExitCode -ne 0) { return $false }
+
+    # An available upgrade lists the package Id alongside a version column.
+    # winget prints "No available upgrade found." / "No installed package
+    # found matching input criteria." when there is nothing to do.
+    if ($result.Output -match 'No available upgrade' -or $result.Output -match 'No installed package') { return $false }
+    return [bool]($result.Output -match [regex]::Escape($Manifest.Id))
 }
 
 function Install-PhoenixApplication {
@@ -730,4 +784,4 @@ function Get-InstallerModuleDefinition {
 
 #endregion
 
-Export-ModuleMember -Function Get-PhoenixApplicationManifest, Test-PhoenixApplicationSatisfied, Install-PhoenixWinGetPackage, Install-PhoenixMsiPackage, Install-PhoenixExePackage, Update-PhoenixWinGetPackage, Uninstall-PhoenixWinGetPackage, Uninstall-PhoenixMsiPackage, Install-PhoenixApplication, Update-PhoenixApplication, Uninstall-PhoenixApplication, Install-PhoenixApplications, Get-PhoenixProfile, Expand-PhoenixProfileApplications, Invoke-PhoenixProfile, Get-InstallerModuleDefinition
+Export-ModuleMember -Function Get-PhoenixApplicationManifest, Test-PhoenixApplicationSatisfied, Test-PhoenixApplicationOutdated, Install-PhoenixWinGetPackage, Install-PhoenixMsiPackage, Install-PhoenixExePackage, Update-PhoenixWinGetPackage, Uninstall-PhoenixWinGetPackage, Uninstall-PhoenixMsiPackage, Install-PhoenixApplication, Update-PhoenixApplication, Uninstall-PhoenixApplication, Install-PhoenixApplications, Get-PhoenixProfile, Expand-PhoenixProfileApplications, Invoke-PhoenixProfile, Get-InstallerModuleDefinition

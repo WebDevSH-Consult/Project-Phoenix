@@ -749,3 +749,44 @@ Describe 'Install-PhoenixApplication Changed flag (ADR 0015 contract)' {
         (Install-PhoenixApplication -Manifest $script:M -MaxAttempts 1).Changed | Should -Be $false
     }
 }
+
+Describe 'Test-PhoenixApplicationOutdated (ADR 0018)' {
+    BeforeAll {
+        Import-Module "$PSScriptRoot/../modules/PhoenixLogging/PhoenixLogging.psd1" -Force
+        Import-Module "$PSScriptRoot/../modules/Installer/Installer.psd1" -Force
+        Initialize-PhoenixLog -LogDirectory (Join-Path $TestDrive 'logs')
+
+        $script:WinGetApp = [PSCustomObject]@{ Name = 'Discord'; Installer = 'Winget'; Id = 'Discord.Discord' }
+    }
+
+    It 'reports outdated when WinGet lists the package with an available upgrade' {
+        Mock -ModuleName Installer Invoke-PhoenixWinGetUpgradeQuery {
+            [PSCustomObject]@{ ExitCode = 0; Output = "Name  Id  Version  Available`nDiscord  Discord.Discord  1.0.0  1.1.0" }
+        }
+
+        Test-PhoenixApplicationOutdated -Manifest $script:WinGetApp | Should -BeTrue
+    }
+
+    It 'reports not outdated when WinGet finds no available upgrade' {
+        Mock -ModuleName Installer Invoke-PhoenixWinGetUpgradeQuery {
+            [PSCustomObject]@{ ExitCode = 0; Output = 'No available upgrade found.' }
+        }
+
+        Test-PhoenixApplicationOutdated -Manifest $script:WinGetApp | Should -BeFalse
+    }
+
+    It 'reports not outdated (and never queries WinGet) for a non-WinGet backend' {
+        Mock -ModuleName Installer Invoke-PhoenixWinGetUpgradeQuery { throw 'should not be called' }
+
+        Test-PhoenixApplicationOutdated -Manifest ([PSCustomObject]@{ Name = 'Thing'; Installer = 'MSI'; Source = 'x.msi' }) | Should -BeFalse
+        Should -Invoke -ModuleName Installer Invoke-PhoenixWinGetUpgradeQuery -Times 0
+    }
+
+    It 'reports not outdated on a non-zero query exit code (uncertain never invents drift)' {
+        Mock -ModuleName Installer Invoke-PhoenixWinGetUpgradeQuery {
+            [PSCustomObject]@{ ExitCode = 1; Output = '' }
+        }
+
+        Test-PhoenixApplicationOutdated -Manifest $script:WinGetApp | Should -BeFalse
+    }
+}
