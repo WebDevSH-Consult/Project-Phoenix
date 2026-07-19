@@ -177,6 +177,60 @@ function Get-PhoenixRollbackPlan {
     return $plan.ToArray()
 }
 
+function Invoke-PhoenixRollbackFromResults {
+    <#
+        .SYNOPSIS
+        Reverses a run's confirmed changes directly from its lifecycle health
+        results - the in-memory sibling of Invoke-PhoenixRollback.
+
+        .DESCRIPTION
+        Given the array of module health objects a run produced (each carrying
+        a Details list with Changed/PreviousValue, exactly as the deployment
+        report does), builds a rollback plan and executes it: settings restored
+        or removed, applications uninstalled, in reverse order, each verified.
+        This is the shared core both the operator-invoked rollback (from a
+        report file) and the automatic transactional rollback (ADR 0017) call -
+        neither duplicates the reversal logic.
+    #>
+    [CmdletBinding()]
+    [OutputType([PSCustomObject[]])]
+    param(
+        [Parameter(Mandatory)]
+        [AllowEmptyCollection()]
+        [PSCustomObject[]]$Results,
+
+        [Parameter(Mandatory)]
+        [string]$RootPath
+    )
+
+    $settingManifests = @(Get-PhoenixSettingManifest -ManifestsPath (Join-Path $RootPath 'modules\WindowsConfig\Settings'))
+    $appManifests = @(Get-PhoenixApplicationManifest -ManifestsPath (Join-Path $RootPath 'modules\Installer\Applications'))
+
+    # Get-PhoenixRollbackPlan reads $Report.Modules[].Details[]; the results
+    # array is that Modules collection, so wrap it in the same shape.
+    $plan = Get-PhoenixRollbackPlan -Report ([PSCustomObject]@{ Modules = $Results }) -SettingManifests $settingManifests -ApplicationManifests $appManifests
+    Write-PhoenixLog -Level INFO -Message "[Recovery] Rollback plan: $($plan.Count) change(s) to reverse."
+
+    $rollbackResults = @(
+        foreach ($entry in $plan) {
+            switch ($entry.Type) {
+                'Application' { Undo-PhoenixApplicationInstall -Manifest $entry.Manifest }
+                'Setting' { Undo-PhoenixSettingChange -Name $entry.Name -Path $entry.Path -ValueName $entry.ValueName -ValueKind $entry.ValueKind -PreviousValue $entry.PreviousValue }
+            }
+        }
+    )
+
+    $failed = @($rollbackResults | Where-Object Status -eq 'FAIL')
+    if ($failed.Count -gt 0) {
+        Write-PhoenixLog -Level WARNING -Message "[Recovery] Rollback completed with $($failed.Count) failure(s) out of $($rollbackResults.Count) change(s)."
+    }
+    else {
+        Write-PhoenixLog -Level SUCCESS -Message "[Recovery] Rollback complete: $($rollbackResults.Count) change(s) reversed."
+    }
+
+    return $rollbackResults
+}
+
 function Invoke-PhoenixRollback {
     <#
         .SYNOPSIS
@@ -185,9 +239,9 @@ function Invoke-PhoenixRollback {
 
         .DESCRIPTION
         Reads a deployment report (the most recent under reports/ if
-        -ReportPath is not given), builds a rollback plan from its confirmed
-        changes, and executes it. Operator-invoked - not part of a forward
-        run. See ADR 0015.
+        -ReportPath is not given) and reverses its confirmed changes via
+        Invoke-PhoenixRollbackFromResults. Operator-invoked - not part of a
+        forward run. See ADR 0015.
 
         .EXAMPLE
         Invoke-PhoenixRollback -RootPath (Get-Location)
@@ -215,32 +269,9 @@ function Invoke-PhoenixRollback {
     Write-PhoenixLog -Level INFO -Message "[Recovery] Rolling back from report: $ReportPath"
     $report = Get-Content -LiteralPath $ReportPath -Raw | ConvertFrom-Json
 
-    $settingManifests = @(Get-PhoenixSettingManifest -ManifestsPath (Join-Path $RootPath 'modules\WindowsConfig\Settings'))
-    $appManifests = @(Get-PhoenixApplicationManifest -ManifestsPath (Join-Path $RootPath 'modules\Installer\Applications'))
-
-    $plan = Get-PhoenixRollbackPlan -Report $report -SettingManifests $settingManifests -ApplicationManifests $appManifests
-    Write-PhoenixLog -Level INFO -Message "[Recovery] Rollback plan: $($plan.Count) change(s) to reverse."
-
-    $results = @(
-        foreach ($entry in $plan) {
-            switch ($entry.Type) {
-                'Application' { Undo-PhoenixApplicationInstall -Manifest $entry.Manifest }
-                'Setting' { Undo-PhoenixSettingChange -Name $entry.Name -Path $entry.Path -ValueName $entry.ValueName -ValueKind $entry.ValueKind -PreviousValue $entry.PreviousValue }
-            }
-        }
-    )
-
-    $failed = @($results | Where-Object Status -eq 'FAIL')
-    if ($failed.Count -gt 0) {
-        Write-PhoenixLog -Level WARNING -Message "[Recovery] Rollback completed with $($failed.Count) failure(s) out of $($results.Count) change(s)."
-    }
-    else {
-        Write-PhoenixLog -Level SUCCESS -Message "[Recovery] Rollback complete: $($results.Count) change(s) reversed."
-    }
-
-    return $results
+    return Invoke-PhoenixRollbackFromResults -Results @($report.Modules) -RootPath $RootPath
 }
 
 #endregion
 
-Export-ModuleMember -Function Undo-PhoenixSettingChange, Undo-PhoenixApplicationInstall, Get-PhoenixRollbackPlan, Invoke-PhoenixRollback
+Export-ModuleMember -Function Undo-PhoenixSettingChange, Undo-PhoenixApplicationInstall, Get-PhoenixRollbackPlan, Invoke-PhoenixRollbackFromResults, Invoke-PhoenixRollback

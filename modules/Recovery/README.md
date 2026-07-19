@@ -1,9 +1,10 @@
 # Recovery
 
-The Recovery / Rollback Engine (ADR [0015](../../docs/adr/0015-recovery-rollback-engine.md)) — the **Self-Heal** stage of the [deployment pipeline](../../ARCHITECTURE.md#standard-the-phoenix-deployment-lifecycle). Reverses the changes a deployment made.
+The Recovery / Rollback Engine (ADR [0015](../../docs/adr/0015-recovery-rollback-engine.md), [0017](../../docs/adr/0017-automatic-transactional-rollback.md)) — the **Self-Heal** stage of the [deployment pipeline](../../ARCHITECTURE.md#standard-the-phoenix-deployment-lifecycle). Reverses the changes a deployment made, whether after the fact or automatically mid-run.
 
 ```powershell
 Invoke-PhoenixRollback -RootPath (Get-Location)   # roll back the most recent deployment report
+.\Bootstrap.ps1 -Transactional                    # all-or-nothing run: auto-reverse on any failure
 ```
 
 ## What it reverses
@@ -21,6 +22,14 @@ Only **confirmed changes** — each mutating result carries a `Changed` boolean,
 
 `Get-PhoenixRollbackPlan` (the plan builder) and the two `Undo-*` primitives are independently usable and fully mockable — no test touches the real registry or a real installer.
 
+## Automatic transactional rollback (ADR 0017)
+
+`Bootstrap.ps1 -Transactional` makes a run **all-or-nothing**: it runs normally, and if any module does not end `Healthy`, Phoenix automatically reverses every confirmed change the run made. It does this through **`Invoke-PhoenixRollbackFromResults -Results -RootPath`** — the in-memory sibling of `Invoke-PhoenixRollback` that reverses a run's live health results instead of a saved report. Both entry points share the *same* plan builder and `Undo-*` primitives (`Invoke-PhoenixRollback` simply loads a report and hands its `Modules` to the results path), so the report-driven and in-run rollbacks can never drift.
+
+The change ledger comes for free: every module surfaces the changes it made through the lifecycle's `GetDetails` channel, so a completed run already knows exactly what to reverse. The forward orchestration path is unchanged.
+
+"Transactional" is bounded honestly — it reverses Phoenix's own recorded, reversible changes (settings, installs), best-effort and verified; a reversal that fails is surfaced, not hidden. It is not an OS snapshot. Opt-in: the default run leaves earlier successful changes in place.
+
 ## Not orchestrated
 
-Rollback is a recovery action, not forward deployment, so this module has **no `module.json`** — it's operator-invoked, like uninstall. Automatic rollback-on-failure within a run is deferred (ADR 0015): it needs cross-module transactional state; this engine is the foundation it will build on.
+Rollback is a recovery action, not forward deployment, so this module has **no `module.json`** — it's operator-invoked or triggered by the transactional run, never an orchestrated stage of its own.
