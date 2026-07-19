@@ -20,13 +20,14 @@ Workstation provisioning build-out (Roadmap 0.1–0.9 complete, working toward 1
 - Installer completeness: dry-run (`-DryRun` previews the plan, no backend, skips preflight — PASS for no-op, WARN for pending change), upgrade (`Update-PhoenixApplication`, `winget upgrade`), and uninstall (`Uninstall-PhoenixApplication`, `winget uninstall`/`msiexec /x`, verified gone; EXE unsupported). Operator-invoked; the engine is now feature-complete for v1.0. ADR [0014](docs/adr/0014-installer-completeness.md).
 - Recovery / Rollback Engine: `modules/Recovery` (`Invoke-PhoenixRollback`) reverses a deployment — restore settings to their `PreviousValue` (or remove ones Phoenix introduced), uninstall apps it installed — driven by the deployment report's confirmed changes (`Changed` flag now on setting/install results), in reverse order, each verified. The pipeline's Self-Heal stage made real. Operator-invoked. ADR [0015](docs/adr/0015-recovery-rollback-engine.md). Verified against the live registry.
 - Intelligent Deployment Planner: `modules/DeploymentPlanner` — the orchestration "brain." `New-PhoenixDeploymentPlan` builds an explainable, exportable plan before anything changes (per-item `Install`/`Apply`/`Skip`/`Defer` + reason), reusing the executors' own predicates so the plan matches a real run; the header carries detected hardware. `Bootstrap.ps1 -Plan` shows/exports a config-scoped plan and exits without executing (review before deploy). Estimates/risk are declared coarse heuristics; plan-gated execution deferred to pair with auto-rollback. ADR [0016](docs/adr/0016-deployment-planner.md). Verified end-to-end against the live machine (correctly skipped installed apps, deferred an install behind a real pending-file-op, deferred the elevation-gated telemetry setting).
+- Automatic Transactional Rollback: `Bootstrap.ps1 -Transactional` makes a run all-or-nothing — runs normally, then if any module does not end `Healthy`, automatically reverses every confirmed change the run made (in reverse order, each verified) and reports committed / rolled-back / rolled-back-with-failures. New `Invoke-PhoenixRollbackFromResults` (in `modules/Recovery`) reverses from live run results; `Invoke-PhoenixRollback` now delegates to it, so the report-driven and in-run paths share one plan builder + `Undo-*` primitives and can't drift. Forward orchestration path untouched; opt-in; honest bounds (reversible surface only, best-effort + verified, not an OS snapshot). ADR [0017](docs/adr/0017-automatic-transactional-rollback.md). This closes the rollback-on-failure item ADR 0015 deferred.
 
 ## Current Task
 - None in progress — awaiting next task selection
 
 ## Next Planned Task
 - Production-hardening phase (numbered roadmap complete; remaining work is resilience and polish toward v1.0):
-  1. Automatic rollback-on-failure — build on the Recovery engine to reverse a run's changes when a later step fails; naturally pairs with plan-gated execution (execute-the-plan, not the profile) now that the Deployment Planner exists (needs cross-module transactional state; deferred in ADR 0015/0016)
+  1. Plan-gated transactional execution — combine the Deployment Planner (ADR 0016) with the transactional run (ADR 0017): execute the reviewed plan, not the profile, as one all-or-nothing transaction. Fail-fast (stop at first failure) is the related refinement.
   2. Advanced validation slices (per-application checks now that installers exist; drift detection)
   3. Final v1.0 polish and the release
 - Also pending: decide EPIC numbering for a "Hardware Awareness" epic doc (EPIC-05 was informally used for the Application Deployment Platform; suggest EPIC-06)
@@ -50,9 +51,9 @@ Workstation provisioning build-out (Roadmap 0.1–0.9 complete, working toward 1
 ## Current Repository Metrics
 
 Modules: 12
-Tests: 184
+Tests: 188
 PowerShell Files: 37
-Markdown Documents: 51
+Markdown Documents: 53
 GitHub Workflows: 1
 CI Status: Passing
 Open Issues: 0
