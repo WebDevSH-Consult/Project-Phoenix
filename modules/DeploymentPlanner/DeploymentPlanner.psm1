@@ -1,0 +1,225 @@
+<#
+    Phoenix Intelligent Deployment Planner (ADR 0016).
+
+    Builds an explainable deployment plan from the machine's actual state and
+    the work Phoenix can actually perform - "here is exactly what I will do,
+    and why" - without executing anything.
+
+    Current-vs-desired state comes from the State Engine (ADR 0018), the single
+    source of truth: Get-PhoenixState scopes the in-scope applications and
+    settings and evaluates each against its declaration. The planner adds only
+    the deploy-time decisions the State Engine does not own - deferral for an
+    unsafe preflight or missing elevation, ordering, estimates and risk - so
+    the plan still matches what a real run would do.
+
+    It asks for state with -SkipVersionCheck: an orchestrated run skips an
+    installed application whether or not a newer version exists, so planning
+    would not act on version currency, and querying WinGet per package would
+    cost minutes for no change in the plan. Upgrades are the repair path's job
+    (Invoke-PhoenixRepair), not deployment's.
+
+    Plans only real actions - config/profile-gated application installs and
+    Windows settings. It never invents capabilities Phoenix lacks. The plan
+    header carries the detected hardware so plans are machine-aware.
+
+    Operator-invoked (not orchestrated). Depends on PhoenixLogging; imports the
+    capability modules it consumes itself.
+#>
+
+Import-Module (Join-Path $PSScriptRoot '..\PhoenixCore\PhoenixCore.psd1')
+Import-Module (Join-Path $PSScriptRoot '..\HardwareDetection\HardwareDetection.psd1')
+Import-Module (Join-Path $PSScriptRoot '..\Validation\Validation.psd1')
+Import-Module (Join-Path $PSScriptRoot '..\StateEngine\StateEngine.psd1')
+
+# Coarse, declared estimate heuristics (ADR 0016) - placeholders, not measurements.
+$script:EstimateInstallSeconds = 120
+$script:EstimateApplySeconds = 5
+
+function New-PhoenixDeploymentPlan {
+    <#
+        .SYNOPSIS
+        Builds a deployment plan: for the applications and settings in scope,
+        decides the action (Install/Apply/Skip/Defer) and why - without
+        changing anything.
+
+        .DESCRIPTION
+        Current-vs-desired state (and the scoping that selects what is in
+        scope - a profile with its dependencies, or configuration) comes from
+        the State Engine's Get-PhoenixState (ADR 0018). This function adds the
+        deploy-time decisions the State Engine does not own: deferral for an
+        unsafe preflight or missing elevation, ordering, estimates and risk.
+        The plan still reflects what a real run would do. See ADR 0016.
+    #>
+    [CmdletBinding()]
+    [OutputType([PSCustomObject])]
+    param(
+        [Parameter(Mandatory)]
+        [string]$RootPath,
+
+        [string]$ProfileName
+    )
+
+    $hardware = Get-PhoenixHardware
+    $elevated = Test-PhoenixElevated
+    $preflight = Get-PhoenixPreflightState
+
+    # Single source of truth for what is in scope and how it currently stands.
+    # -SkipVersionCheck: an orchestrated run skips an installed application
+    # whether or not a newer version exists, so the plan would be identical -
+    # and the per-package WinGet query costs minutes. Upgrades belong to
+    # Invoke-PhoenixRepair, not to deployment.
+    $state = Get-PhoenixState -RootPath $RootPath -ProfileName $ProfileName -SkipVersionCheck
+
+    $preflightReason = ($preflight.Results | Where-Object Status -eq 'FAIL' | ForEach-Object { $_.Name }) -join ', '
+
+    $actions = [System.Collections.Generic.List[PSCustomObject]]::new()
+
+    foreach ($item in @($state.Settings)) {
+        $manifest = $item.Manifest
+        if ($item.Status -eq 'Applied') {
+            $actions.Add([PSCustomObject]@{ Category = 'Setting'; Name = $item.Name; Action = 'Skip'; Reason = 'Already in the desired state.'; Risk = 'Low'; EstimatedSeconds = 0 })
+        }
+        elseif ($manifest.RequiresElevation -and -not $elevated) {
+            $actions.Add([PSCustomObject]@{ Category = 'Setting'; Name = $item.Name; Action = 'Defer'; Reason = 'Requires elevation - re-run elevated to apply.'; Risk = 'Medium'; EstimatedSeconds = 0 })
+        }
+        else {
+            $risk = if ($manifest.RequiresElevation) { 'Medium' } else { 'Low' }
+            $actions.Add([PSCustomObject]@{ Category = 'Setting'; Name = $item.Name; Action = 'Apply'; Reason = 'Not in the desired state.'; Risk = $risk; EstimatedSeconds = $script:EstimateApplySeconds })
+        }
+    }
+
+    foreach ($item in @($state.Applications)) {
+        # Present and Outdated both mean "installed" - an orchestrated run
+        # skips either. Only Missing is a deployment action.
+        if ($item.Status -ne 'Missing') {
+            $actions.Add([PSCustomObject]@{ Category = 'Application'; Name = $item.Name; Action = 'Skip'; Reason = 'Already installed.'; Risk = 'Low'; EstimatedSeconds = 0 })
+        }
+        elseif (-not $preflight.Safe) {
+            $actions.Add([PSCustomObject]@{ Category = 'Application'; Name = $item.Name; Action = 'Defer'; Reason = "System not in a safe state for installation ($preflightReason)."; Risk = 'Low'; EstimatedSeconds = 0 })
+        }
+        else {
+            $actions.Add([PSCustomObject]@{ Category = 'Application'; Name = $item.Name; Action = 'Install'; Reason = 'Not installed.'; Risk = 'Low'; EstimatedSeconds = $script:EstimateInstallSeconds })
+        }
+    }
+
+    $actionArray = $actions.ToArray()
+    $changing = @($actionArray | Where-Object Action -in @('Install', 'Apply'))
+    $totalSeconds = ($actionArray | Measure-Object -Property EstimatedSeconds -Sum).Sum
+    $overallRisk = if ($actionArray | Where-Object Risk -eq 'Medium') { 'Medium' } else { 'Low' }
+
+    return [PSCustomObject]@{
+        Timestamp     = (Get-Date).ToString('o')
+        Machine       = [PSCustomObject]@{
+            ComputerName = [System.Environment]::MachineName
+            FormFactor   = $hardware.System.FormFactor
+            Cpu          = "$($hardware.Cpu.Name) [$($hardware.Cpu.Vendor)]"
+            Gpus         = @($hardware.Gpus | ForEach-Object { "$($_.Name) [$($_.Vendor)]" })
+            MemoryGB     = $hardware.MemoryGB
+        }
+        Scope         = $state.Scope
+        Elevated      = $elevated
+        PreflightSafe = $preflight.Safe
+        Actions       = $actionArray
+        Summary       = [PSCustomObject]@{
+            Install         = @($actionArray | Where-Object Action -eq 'Install').Count
+            Apply           = @($actionArray | Where-Object Action -eq 'Apply').Count
+            Skip            = @($actionArray | Where-Object Action -eq 'Skip').Count
+            Defer           = @($actionArray | Where-Object Action -eq 'Defer').Count
+            Changing        = $changing.Count
+            EstimatedMinutes = [math]::Round($totalSeconds / 60, 1)
+            Risk            = $overallRisk
+        }
+    }
+}
+
+function Show-PhoenixDeploymentPlan {
+    <#
+        .SYNOPSIS
+        Renders a deployment plan to the console for review before execution.
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [PSCustomObject]$Plan
+    )
+
+    Write-Host ''
+    Write-Host "Phoenix Deployment Plan - $($Plan.Scope)" -ForegroundColor Cyan
+    Write-Host "  Machine: $($Plan.Machine.ComputerName) ($($Plan.Machine.FormFactor)), $($Plan.Machine.Cpu), $($Plan.Machine.MemoryGB) GB"
+    Write-Host "  GPU:     $($Plan.Machine.Gpus -join '; ')"
+    Write-Host "  Elevated: $($Plan.Elevated)    Preflight safe: $($Plan.PreflightSafe)"
+    Write-Host ''
+
+    $glyphs = @{ Install = '+'; Apply = '~'; Skip = 'o'; Defer = '!' }
+    foreach ($action in $Plan.Actions) {
+        $glyph = if ($glyphs.ContainsKey($action.Action)) { $glyphs[$action.Action] } else { '-' }
+        $colour = switch ($action.Action) { 'Install' { 'Green' } 'Apply' { 'Green' } 'Defer' { 'Yellow' } default { 'Gray' } }
+        Write-Host ("  [{0}] {1,-11} {2,-32} {3}" -f $glyph, $action.Action, $action.Name, $action.Reason) -ForegroundColor $colour
+    }
+
+    Write-Host ''
+    $s = $Plan.Summary
+    Write-Host "  $($s.Changing) change(s): $($s.Install) install, $($s.Apply) apply | $($s.Skip) skip, $($s.Defer) deferred"
+    Write-Host "  Estimated time: ~$($s.EstimatedMinutes)m (rough)    Risk: $($s.Risk)" -ForegroundColor $(if ($s.Risk -eq 'Medium') { 'Yellow' } else { 'Green' })
+    Write-Host ''
+}
+
+function Export-PhoenixDeploymentPlan {
+    <#
+        .SYNOPSIS
+        Persists a deployment plan as timestamped JSON under plans/ - the
+        auditable, exportable artifact.
+    #>
+    [CmdletBinding()]
+    [OutputType([string])]
+    param(
+        [Parameter(Mandatory)]
+        [PSCustomObject]$Plan,
+
+        [Parameter(Mandatory)]
+        [string]$RootPath,
+
+        [string]$PlansPath = (Join-Path $RootPath 'plans')
+    )
+
+    if (-not (Test-Path -LiteralPath $PlansPath)) {
+        New-Item -ItemType Directory -Path $PlansPath -Force | Out-Null
+    }
+
+    $stamp = Get-Date -Format 'yyyyMMdd-HHmmss'
+    $path = Join-Path $PlansPath "deployment-plan-$stamp.json"
+    $Plan | ConvertTo-Json -Depth 6 | Set-Content -Path $path -Encoding utf8
+
+    Write-PhoenixLog -Level SUCCESS -Message "[Planner] Deployment plan exported: $path"
+    return $path
+}
+
+function Get-PhoenixDeploymentPlan {
+    <#
+        .SYNOPSIS
+        Loads the most recent exported deployment plan (or -Path).
+    #>
+    [CmdletBinding()]
+    [OutputType([PSCustomObject])]
+    param(
+        [Parameter(Mandatory)]
+        [string]$RootPath,
+
+        [string]$Path
+    )
+
+    if (-not $Path) {
+        $plansDir = Join-Path $RootPath 'plans'
+        $latest = Get-ChildItem -LiteralPath $plansDir -Filter 'deployment-plan-*.json' -File -ErrorAction SilentlyContinue |
+            Sort-Object Name -Descending | Select-Object -First 1
+        if (-not $latest) {
+            Write-PhoenixLog -Level ERROR -Message "[Planner] No deployment plan found under $plansDir."
+            throw "No deployment plan found under $plansDir."
+        }
+        $Path = $latest.FullName
+    }
+
+    return Get-Content -LiteralPath $Path -Raw | ConvertFrom-Json
+}
+
+Export-ModuleMember -Function New-PhoenixDeploymentPlan, Show-PhoenixDeploymentPlan, Export-PhoenixDeploymentPlan, Get-PhoenixDeploymentPlan

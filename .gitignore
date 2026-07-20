@@ -6,3 +6,9 @@ temp/*
 
 reports/*
 !reports/.gitkeep
+
+plans/*
+!plans/.gitkeep
+
+audits/*
+!audits/.gitkeep

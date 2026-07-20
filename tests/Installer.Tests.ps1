@@ -533,3 +533,260 @@ Describe 'Installer preflight gate (ADR 0012)' {
         Should -Invoke -ModuleName Installer Install-PhoenixApplication -Times 0
     }
 }
+
+Describe 'Installer completeness: dry-run (ADR 0014)' {
+    BeforeAll {
+        Import-Module "$PSScriptRoot/../modules/PhoenixLogging/PhoenixLogging.psd1" -Force
+        Import-Module "$PSScriptRoot/../modules/Validation/Validation.psd1" -Force
+        Import-Module "$PSScriptRoot/../modules/PhoenixBootstrap/PhoenixBootstrap.psd1" -Force
+        Import-Module "$PSScriptRoot/../modules/Installer/Installer.psd1" -Force
+        Initialize-PhoenixLog -LogDirectory (Join-Path $TestDrive 'logs')
+
+        $script:WinGetManifest = [PSCustomObject]@{ Name = 'Sample'; Installer = 'Winget'; Id = 'Sample.Id'; Source = $null; Validate = @([PSCustomObject]@{ Type = 'Command'; Value = 'sample' }) }
+    }
+
+    It 'reports PASS and invokes no backend when already satisfied' {
+        Mock -ModuleName Installer Test-PhoenixApplicationSatisfied { $true }
+        Mock -ModuleName Installer Invoke-PhoenixWinGet { throw 'should not be called' }
+
+        $result = Install-PhoenixApplication -Manifest $script:WinGetManifest -DryRun
+
+        $result.Status | Should -Be 'PASS'
+        $result.Message | Should -Match 'DRY RUN'
+        Should -Invoke -ModuleName Installer Invoke-PhoenixWinGet -Times 0
+    }
+
+    It 'reports WARN naming the backend, and invokes no backend, when a change is pending' {
+        Mock -ModuleName Installer Test-PhoenixApplicationSatisfied { $false }
+        Mock -ModuleName Installer Invoke-PhoenixWinGet { throw 'should not be called' }
+
+        $result = Install-PhoenixApplication -Manifest $script:WinGetManifest -DryRun
+
+        $result.Status | Should -Be 'WARN'
+        $result.Message | Should -Match 'would install via WinGet'
+        Should -Invoke -ModuleName Installer Invoke-PhoenixWinGet -Times 0
+    }
+
+    It 'Install-PhoenixApplications dry-run skips the preflight gate entirely' {
+        Mock -ModuleName Installer Get-PhoenixPreflightState { throw 'preflight should not run in dry-run' }
+        Mock -ModuleName Installer Test-PhoenixApplicationSatisfied { $false }
+
+        $manifests = @([PSCustomObject]@{ Name = 'A'; Installer = 'Winget'; Id = 'A.Id'; Source = $null; ConfigFlag = 'applications.InstallA'; Validate = @(); Dependencies = @(); RunOrder = 100 })
+        $config = [PSCustomObject]@{ Modules = [PSCustomObject]@{ applications = [PSCustomObject]@{ InstallA = $true } } }
+
+        $results = Install-PhoenixApplications -Manifests $manifests -Configuration $config -DryRun
+
+        $results[0].Status | Should -Be 'WARN'
+        Should -Invoke -ModuleName Installer Get-PhoenixPreflightState -Times 0
+    }
+}
+
+Describe 'Installer completeness: upgrade (ADR 0014)' {
+    BeforeAll {
+        Import-Module "$PSScriptRoot/../modules/PhoenixLogging/PhoenixLogging.psd1" -Force
+        Import-Module "$PSScriptRoot/../modules/Validation/Validation.psd1" -Force
+        Import-Module "$PSScriptRoot/../modules/Installer/Installer.psd1" -Force
+        Initialize-PhoenixLog -LogDirectory (Join-Path $TestDrive 'logs')
+
+        $script:WinGetManifest = [PSCustomObject]@{ Name = 'Sample'; Installer = 'Winget'; Id = 'Sample.Id'; Source = $null; Validate = @() }
+    }
+
+    It 'upgrades via WinGet and reports PASS when installed and the backend succeeds' {
+        Mock -ModuleName Installer Test-PhoenixApplicationSatisfied { $true }
+        Mock -ModuleName Installer Update-PhoenixWinGetPackage { $true }
+
+        $result = Update-PhoenixApplication -Manifest $script:WinGetManifest
+
+        $result.Status | Should -Be 'PASS'
+        Should -Invoke -ModuleName Installer Update-PhoenixWinGetPackage -Times 1
+    }
+
+    It 'reports FAIL when the upgrade backend fails' {
+        Mock -ModuleName Installer Test-PhoenixApplicationSatisfied { $true }
+        Mock -ModuleName Installer Update-PhoenixWinGetPackage { $false }
+
+        (Update-PhoenixApplication -Manifest $script:WinGetManifest).Status | Should -Be 'FAIL'
+    }
+
+    It 'reports WARN (nothing to upgrade) when not installed, without calling the backend' {
+        Mock -ModuleName Installer Test-PhoenixApplicationSatisfied { $false }
+        Mock -ModuleName Installer Update-PhoenixWinGetPackage { throw 'should not be called' }
+
+        $result = Update-PhoenixApplication -Manifest $script:WinGetManifest
+
+        $result.Status | Should -Be 'WARN'
+        $result.Message | Should -Match 'nothing to upgrade'
+    }
+
+    It 'reports WARN (not supported) for a non-WinGet backend' {
+        $exe = [PSCustomObject]@{ Name = 'ExeApp'; Installer = 'EXE'; Source = 'C:\app.exe'; Validate = @() }
+
+        $result = Update-PhoenixApplication -Manifest $exe
+
+        $result.Status | Should -Be 'WARN'
+        $result.Message | Should -Match 'not supported'
+    }
+}
+
+Describe 'Installer completeness: uninstall (ADR 0014)' {
+    BeforeAll {
+        Import-Module "$PSScriptRoot/../modules/PhoenixLogging/PhoenixLogging.psd1" -Force
+        Import-Module "$PSScriptRoot/../modules/Validation/Validation.psd1" -Force
+        Import-Module "$PSScriptRoot/../modules/Installer/Installer.psd1" -Force
+        Initialize-PhoenixLog -LogDirectory (Join-Path $TestDrive 'logs')
+
+        $script:WinGetManifest = [PSCustomObject]@{ Name = 'Sample'; Installer = 'Winget'; Id = 'Sample.Id'; Source = $null; Validate = @() }
+    }
+
+    It 'reports PASS (idempotent) when not installed, without calling the backend' {
+        Mock -ModuleName Installer Test-PhoenixApplicationSatisfied { $false }
+        Mock -ModuleName Installer Uninstall-PhoenixWinGetPackage { throw 'should not be called' }
+
+        $result = Uninstall-PhoenixApplication -Manifest $script:WinGetManifest
+
+        $result.Status | Should -Be 'PASS'
+        $result.Message | Should -Match 'nothing to uninstall'
+    }
+
+    It 'uninstalls and verifies removal, reporting PASS' {
+        $script:StillThere = $true
+        Mock -ModuleName Installer Test-PhoenixApplicationSatisfied { $script:StillThere }
+        Mock -ModuleName Installer Uninstall-PhoenixWinGetPackage { $script:StillThere = $false; return $true }
+
+        $result = Uninstall-PhoenixApplication -Manifest $script:WinGetManifest
+
+        $result.Status | Should -Be 'PASS'
+        $result.Message | Should -Match 'Uninstalled'
+    }
+
+    It 'reports FAIL when the app is still present after the uninstall backend runs' {
+        Mock -ModuleName Installer Test-PhoenixApplicationSatisfied { $true }
+        Mock -ModuleName Installer Uninstall-PhoenixWinGetPackage { $true }
+
+        (Uninstall-PhoenixApplication -Manifest $script:WinGetManifest).Status | Should -Be 'FAIL'
+    }
+
+    It 'uses msiexec /x for an MSI backend' {
+        $msi = [PSCustomObject]@{ Name = 'MsiApp'; Installer = 'MSI'; Source = 'C:\app.msi'; Validate = @() }
+        $script:MsiThere = $true
+        Mock -ModuleName Installer Test-PhoenixApplicationSatisfied { $script:MsiThere }
+        Mock -ModuleName Installer Uninstall-PhoenixMsiPackage { $script:MsiThere = $false; return $true }
+
+        $result = Uninstall-PhoenixApplication -Manifest $msi
+
+        $result.Status | Should -Be 'PASS'
+        Should -Invoke -ModuleName Installer Uninstall-PhoenixMsiPackage -Times 1
+    }
+
+    It 'reports WARN (not supported) for an EXE backend' {
+        $exe = [PSCustomObject]@{ Name = 'ExeApp'; Installer = 'EXE'; Source = 'C:\app.exe'; Validate = @() }
+        Mock -ModuleName Installer Test-PhoenixApplicationSatisfied { $true }
+
+        $result = Uninstall-PhoenixApplication -Manifest $exe
+
+        $result.Status | Should -Be 'WARN'
+        $result.Message | Should -Match 'not supported'
+    }
+}
+
+Describe 'Installer completeness: new backend wrappers (ADR 0014)' {
+    BeforeAll {
+        Import-Module "$PSScriptRoot/../modules/PhoenixLogging/PhoenixLogging.psd1" -Force
+        Import-Module "$PSScriptRoot/../modules/Installer/Installer.psd1" -Force
+        Initialize-PhoenixLog -LogDirectory (Join-Path $TestDrive 'logs')
+    }
+
+    It 'Update-PhoenixWinGetPackage returns true on exit code 0' {
+        Mock -ModuleName Installer Invoke-PhoenixWinGet { 0 }
+        Update-PhoenixWinGetPackage -PackageId 'Git.Git' | Should -Be $true
+    }
+
+    It 'Uninstall-PhoenixWinGetPackage returns false on a non-zero exit code' {
+        Mock -ModuleName Installer Invoke-PhoenixWinGet { 1 }
+        Uninstall-PhoenixWinGetPackage -PackageId 'Git.Git' | Should -Be $false
+    }
+
+    It 'Uninstall-PhoenixMsiPackage treats 3010 (reboot required) as success' {
+        Mock -ModuleName Installer Invoke-PhoenixMsiExec { 3010 }
+        Uninstall-PhoenixMsiPackage -Path 'C:\fake.msi' | Should -Be $true
+    }
+}
+
+Describe 'Install-PhoenixApplication Changed flag (ADR 0015 contract)' {
+    BeforeAll {
+        Import-Module "$PSScriptRoot/../modules/PhoenixLogging/PhoenixLogging.psd1" -Force
+        Import-Module "$PSScriptRoot/../modules/Validation/Validation.psd1" -Force
+        Import-Module "$PSScriptRoot/../modules/Installer/Installer.psd1" -Force
+        Initialize-PhoenixLog -LogDirectory (Join-Path $TestDrive 'logs')
+
+        $script:M = [PSCustomObject]@{ Name = 'App'; Installer = 'Winget'; Id = 'A.Id'; Source = $null; Validate = @([PSCustomObject]@{ Type = 'Command'; Value = 'x' }) }
+    }
+
+    It 'marks Changed = $true only on a verified install' {
+        $script:Installed = $false
+        Mock -ModuleName Installer Test-PhoenixApplicationSatisfied { $script:Installed }
+        Mock -ModuleName Installer Invoke-PhoenixWinGet { $script:Installed = $true; return 0 }
+
+        (Install-PhoenixApplication -Manifest $script:M).Changed | Should -Be $true
+    }
+
+    It 'marks Changed = $false when already installed (skip)' {
+        Mock -ModuleName Installer Test-PhoenixApplicationSatisfied { $true }
+
+        (Install-PhoenixApplication -Manifest $script:M).Changed | Should -Be $false
+    }
+
+    It 'marks Changed = $false on a dry run' {
+        Mock -ModuleName Installer Test-PhoenixApplicationSatisfied { $false }
+
+        (Install-PhoenixApplication -Manifest $script:M -DryRun).Changed | Should -Be $false
+    }
+
+    It 'marks Changed = $false when the install fails' {
+        Mock -ModuleName Installer Test-PhoenixApplicationSatisfied { $false }
+        Mock -ModuleName Installer Invoke-PhoenixWinGet { 1 }
+
+        (Install-PhoenixApplication -Manifest $script:M -MaxAttempts 1).Changed | Should -Be $false
+    }
+}
+
+Describe 'Test-PhoenixApplicationOutdated (ADR 0018)' {
+    BeforeAll {
+        Import-Module "$PSScriptRoot/../modules/PhoenixLogging/PhoenixLogging.psd1" -Force
+        Import-Module "$PSScriptRoot/../modules/Installer/Installer.psd1" -Force
+        Initialize-PhoenixLog -LogDirectory (Join-Path $TestDrive 'logs')
+
+        $script:WinGetApp = [PSCustomObject]@{ Name = 'Discord'; Installer = 'Winget'; Id = 'Discord.Discord' }
+    }
+
+    It 'reports outdated when WinGet lists the package with an available upgrade' {
+        Mock -ModuleName Installer Invoke-PhoenixWinGetUpgradeQuery {
+            [PSCustomObject]@{ ExitCode = 0; Output = "Name  Id  Version  Available`nDiscord  Discord.Discord  1.0.0  1.1.0" }
+        }
+
+        Test-PhoenixApplicationOutdated -Manifest $script:WinGetApp | Should -BeTrue
+    }
+
+    It 'reports not outdated when WinGet finds no available upgrade' {
+        Mock -ModuleName Installer Invoke-PhoenixWinGetUpgradeQuery {
+            [PSCustomObject]@{ ExitCode = 0; Output = 'No available upgrade found.' }
+        }
+
+        Test-PhoenixApplicationOutdated -Manifest $script:WinGetApp | Should -BeFalse
+    }
+
+    It 'reports not outdated (and never queries WinGet) for a non-WinGet backend' {
+        Mock -ModuleName Installer Invoke-PhoenixWinGetUpgradeQuery { throw 'should not be called' }
+
+        Test-PhoenixApplicationOutdated -Manifest ([PSCustomObject]@{ Name = 'Thing'; Installer = 'MSI'; Source = 'x.msi' }) | Should -BeFalse
+        Should -Invoke -ModuleName Installer Invoke-PhoenixWinGetUpgradeQuery -Times 0
+    }
+
+    It 'reports not outdated on a non-zero query exit code (uncertain never invents drift)' {
+        Mock -ModuleName Installer Invoke-PhoenixWinGetUpgradeQuery {
+            [PSCustomObject]@{ ExitCode = 1; Output = '' }
+        }
+
+        Test-PhoenixApplicationOutdated -Manifest $script:WinGetApp | Should -BeFalse
+    }
+}
