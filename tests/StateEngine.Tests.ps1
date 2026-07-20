@@ -38,6 +38,15 @@ Describe 'Get-PhoenixState (ADR 0018)' {
         ($state = Get-PhoenixState -RootPath $TestDrive).Applications[0].Status | Should -Be 'Outdated'
     }
 
+    It 'omits the version check under -SkipVersionCheck, reporting an installed app as Present' {
+        # The planner uses this: it treats Outdated and Present identically, so
+        # the per-package WinGet query would cost minutes for no change.
+        Mock -ModuleName StateEngine Test-PhoenixApplicationOutdated { $true }
+
+        (Get-PhoenixState -RootPath $TestDrive -SkipVersionCheck).Applications[0].Status | Should -Be 'Present'
+        Should -Invoke -ModuleName StateEngine Test-PhoenixApplicationOutdated -Times 0
+    }
+
     It 'reports a setting matching its desired value as Applied' {
         (Get-PhoenixState -RootPath $TestDrive).Settings[0].Status | Should -Be 'Applied'
     }

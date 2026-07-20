@@ -18,7 +18,7 @@ Only **real actions** — Phoenix never plans capabilities it doesn't have.
 - **Applications** — selected by a profile (`-ProfileName`, expanded with dependencies) or by configuration (`ConfigFlag`).
 - **Settings** — selected by configuration.
 
-Each becomes an action with a reason, decided by the **same predicates the executors use**, so the plan matches a real run:
+Current-vs-desired state and scoping come from the **State Engine** (`Get-PhoenixState`, ADR [0018](../../docs/adr/0018-desired-state-drift-management.md)) — the single source of truth. The planner adds only the deploy-time decisions the State Engine does not own: deferral, ordering, estimates, and risk. The plan still matches a real run:
 
 | Category | Action | When |
 |---|---|---|
@@ -30,6 +30,8 @@ Each becomes an action with a reason, decided by the **same predicates the execu
 | Setting | `Apply` | not in the desired state |
 
 The plan header reports the detected hardware (`Get-PhoenixHardware`) so plans are machine-aware and auditable.
+
+> An application the State Engine reports as **`Outdated`** still plans as `Skip` — an orchestrated run genuinely skips an installed application and never upgrades. Planning an "Upgrade" would break the promise that the plan matches a real run; upgrades belong to `Invoke-PhoenixRepair`. Because the planner treats `Outdated` and `Present` alike, it asks for state with `-SkipVersionCheck`, avoiding a per-package WinGet query that costs minutes and could not change the plan.
 
 ## Honest estimates
 

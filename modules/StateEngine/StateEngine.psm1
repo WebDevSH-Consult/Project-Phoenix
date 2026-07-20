@@ -47,6 +47,13 @@ function Get-PhoenixState {
         not installed), Outdated (installed, newer available), or Present;
         settings are Modified (value != desired) or Applied. Read-only - uses
         the existing predicates, changes nothing.
+
+        -SkipVersionCheck omits the version-currency domain: installed
+        applications report Present without querying WinGet for an available
+        upgrade. Callers that treat Outdated and Present identically (the
+        Deployment Planner, ADR 0016 - an orchestrated run skips an installed
+        application either way) use this to avoid a slow per-package WinGet
+        query they would not act on. Audit and repair use the full check.
     #>
     [CmdletBinding()]
     [OutputType([PSCustomObject])]
@@ -54,7 +61,9 @@ function Get-PhoenixState {
         [Parameter(Mandatory)]
         [string]$RootPath,
 
-        [string]$ProfileName
+        [string]$ProfileName,
+
+        [switch]$SkipVersionCheck
     )
 
     $configuration = Get-PhoenixConfiguration -RootPath $RootPath
@@ -77,7 +86,7 @@ function Get-PhoenixState {
         if (-not (Test-PhoenixApplicationSatisfied -Manifest $manifest)) {
             $status = 'Missing'
         }
-        elseif (Test-PhoenixApplicationOutdated -Manifest $manifest) {
+        elseif (-not $SkipVersionCheck -and (Test-PhoenixApplicationOutdated -Manifest $manifest)) {
             $status = 'Outdated'
         }
         else {

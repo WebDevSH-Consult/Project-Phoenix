@@ -26,7 +26,7 @@ Drivers and Windows services are **out of scope** until their manifest capabilit
 
 ## Functions
 
-- `Get-PhoenixState -RootPath [-ProfileName]` — the current-state model: every in-scope application (`Missing`/`Outdated`/`Present`) and setting (`Modified`/`Applied`), evaluated against its declaration. Read-only.
+- `Get-PhoenixState -RootPath [-ProfileName] [-SkipVersionCheck]` — the current-state model: every in-scope application (`Missing`/`Outdated`/`Present`) and setting (`Modified`/`Applied`), evaluated against its declaration. Read-only. `-SkipVersionCheck` omits the version domain (installed apps report `Present` without querying WinGet) for callers that would not act on it — see below.
 - `Compare-PhoenixState -State` — a pure function returning the **drift set**: only non-conforming items, each tagged with a `DriftType` and its manifest (so a repair can act on exactly the drift).
 - `Invoke-PhoenixAudit -RootPath [-ProfileName]` — run both, render a summary, and write a timestamped JSON artifact under `audits/` (gitignored, like `reports/` and `plans/`). Changes nothing.
 - `Invoke-PhoenixRepair -RootPath [-ProfileName] [-DryRun] [-Transactional] [-SkipPreflight]` — repair **only** the drift.
@@ -47,9 +47,11 @@ Settings are repaired before applications (forward deployment order). The **pref
 
 > A **version repair is deliberately not reversible**. `Update-PhoenixApplication` reports no `Changed` flag, so a rollback skips it — undoing an upgrade by uninstalling would destroy an application that was legitimately installed before the repair. An honest non-capability rather than a destructive one.
 
-## Coming next
+## The single source of truth
 
-- **Slice 3** — the Deployment Planner (ADR 0016) consumes `Compare-PhoenixState`, making the State Engine the single source of truth.
+The **Deployment Planner** (ADR [0016](../../docs/adr/0016-deployment-planner.md)) consumes `Get-PhoenixState` rather than loading manifests and calling the predicates itself, so deployment and maintenance answer "what is the current state?" from one implementation. The planner adds only the deploy-time decisions the State Engine does not own — deferral, ordering, estimates, risk.
+
+It asks with `-SkipVersionCheck`: an orchestrated run skips an installed application whether or not a newer version exists, so version currency could not change the plan — and querying WinGet per package would cost minutes. Audit and repair, which *do* act on it, use the full check.
 
 ## Not orchestrated
 
