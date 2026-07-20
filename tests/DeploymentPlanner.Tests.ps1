@@ -4,15 +4,20 @@ Describe 'New-PhoenixDeploymentPlan' {
         Import-Module "$PSScriptRoot/../modules/DeploymentPlanner/DeploymentPlanner.psd1" -Force
         Initialize-PhoenixLog -LogDirectory (Join-Path $TestDrive 'logs')
 
-        # Fixture manifests. Config gating and state are mocked, so the real
-        # decision logic in New-PhoenixDeploymentPlan is what's under test.
-        function New-AppManifest {
-            param([string]$Name)
-            [PSCustomObject]@{ Name = $Name; Installer = 'Winget'; ConfigFlag = "apps.$Name"; Validate = @() }
+        # Since ADR 0018 the planner consumes the State Engine, so the mock
+        # seam is Get-PhoenixState. Scoping itself is the State Engine's
+        # concern and is covered by its own tests.
+        function New-State {
+            param([object[]]$Applications = @(), [object[]]$Settings = @(), [string]$Scope = 'Configuration')
+            [PSCustomObject]@{ Timestamp = 'now'; ComputerName = 'TESTPC'; Scope = $Scope; Applications = @($Applications); Settings = @($Settings) }
         }
-        function New-SettingManifest {
-            param([string]$Name, [bool]$RequiresElevation = $false)
-            [PSCustomObject]@{ Name = $Name; Type = 'Registry'; ConfigFlag = "windows.$Name"; RequiresElevation = $RequiresElevation }
+        function New-AppItem {
+            param([string]$Name, [string]$Status)
+            [PSCustomObject]@{ Category = 'Application'; Name = $Name; Status = $Status; Manifest = [PSCustomObject]@{ Name = $Name; Installer = 'Winget'; Id = "$Name.Id" } }
+        }
+        function New-SettingItem {
+            param([string]$Name, [string]$Status, [bool]$RequiresElevation = $false)
+            [PSCustomObject]@{ Category = 'Setting'; Name = $Name; Status = $Status; Manifest = [PSCustomObject]@{ Name = $Name; Type = 'Registry'; RequiresElevation = $RequiresElevation } }
         }
 
         $script:Hardware = [PSCustomObject]@{
@@ -24,19 +29,15 @@ Describe 'New-PhoenixDeploymentPlan' {
     }
 
     BeforeEach {
-        # Defaults: everything in scope, nothing installed/applied, safe, elevated.
-        Mock -ModuleName DeploymentPlanner Get-PhoenixConfiguration { [PSCustomObject]@{} }
-        Mock -ModuleName DeploymentPlanner Get-PhoenixConfigValue { $true }
         Mock -ModuleName DeploymentPlanner Get-PhoenixHardware { $script:Hardware }
         Mock -ModuleName DeploymentPlanner Test-PhoenixElevated { $true }
         Mock -ModuleName DeploymentPlanner Get-PhoenixPreflightState { [PSCustomObject]@{ Safe = $true; Results = @() } }
-        Mock -ModuleName DeploymentPlanner Get-PhoenixApplicationManifest { @(New-AppManifest -Name 'Discord') }
-        Mock -ModuleName DeploymentPlanner Get-PhoenixSettingManifest { @(New-SettingManifest -Name 'DarkMode') }
-        Mock -ModuleName DeploymentPlanner Test-PhoenixApplicationSatisfied { $false }
-        Mock -ModuleName DeploymentPlanner Test-PhoenixSettingApplied { $false }
+        Mock -ModuleName DeploymentPlanner Get-PhoenixState {
+            New-State -Applications @((New-AppItem -Name 'Discord' -Status 'Missing')) -Settings @((New-SettingItem -Name 'DarkMode' -Status 'Modified'))
+        }
     }
 
-    It 'plans an install for an application that is not satisfied and passes preflight' {
+    It 'plans an install for a missing application when preflight is safe' {
         $plan = New-PhoenixDeploymentPlan -RootPath $TestDrive
 
         $action = $plan.Actions | Where-Object Name -eq 'Discord'
@@ -45,14 +46,31 @@ Describe 'New-PhoenixDeploymentPlan' {
         $action.EstimatedSeconds | Should -BeGreaterThan 0
     }
 
-    It 'skips an application that is already satisfied' {
-        Mock -ModuleName DeploymentPlanner Test-PhoenixApplicationSatisfied { $true }
+    It 'skips an application that is already installed' {
+        Mock -ModuleName DeploymentPlanner Get-PhoenixState {
+            New-State -Applications @((New-AppItem -Name 'Discord' -Status 'Present'))
+        }
 
-        $plan = New-PhoenixDeploymentPlan -RootPath $TestDrive
+        ($plan = New-PhoenixDeploymentPlan -RootPath $TestDrive).Actions[0].Action | Should -Be 'Skip'
+        $plan.Summary.Changing | Should -Be 0
+    }
 
-        ($plan.Actions | Where-Object Name -eq 'Discord').Action | Should -Be 'Skip'
-        $plan.Summary.Skip | Should -Be 1
-        $plan.Summary.Changing | Should -Be 1  # the setting still applies
+    It 'skips an installed-but-outdated application - an orchestrated run never upgrades' {
+        # Fidelity (ADR 0016): the plan must match a real run. Upgrades belong
+        # to Invoke-PhoenixRepair, not deployment.
+        Mock -ModuleName DeploymentPlanner Get-PhoenixState {
+            New-State -Applications @((New-AppItem -Name 'Steam' -Status 'Outdated'))
+        }
+
+        $action = (New-PhoenixDeploymentPlan -RootPath $TestDrive).Actions[0]
+        $action.Action | Should -Be 'Skip'
+        $action.Reason | Should -Be 'Already installed.'
+    }
+
+    It 'requests state without the version check (a plan would not act on it)' {
+        $null = New-PhoenixDeploymentPlan -RootPath $TestDrive
+
+        Should -Invoke -ModuleName DeploymentPlanner Get-PhoenixState -Times 1 -ParameterFilter { $SkipVersionCheck }
     }
 
     It 'defers an application install when preflight is unsafe, naming the reason' {
@@ -60,56 +78,51 @@ Describe 'New-PhoenixDeploymentPlan' {
             [PSCustomObject]@{ Safe = $false; Results = @([PSCustomObject]@{ Name = 'PendingReboot'; Status = 'FAIL' }) }
         }
 
-        $plan = New-PhoenixDeploymentPlan -RootPath $TestDrive
-
-        $action = $plan.Actions | Where-Object Name -eq 'Discord'
+        $action = (New-PhoenixDeploymentPlan -RootPath $TestDrive).Actions | Where-Object Name -eq 'Discord'
         $action.Action | Should -Be 'Defer'
         $action.Reason | Should -BeLike '*PendingReboot*'
     }
 
     It 'applies a setting that is not in the desired state' {
-        $plan = New-PhoenixDeploymentPlan -RootPath $TestDrive
-
-        $action = $plan.Actions | Where-Object Name -eq 'DarkMode'
+        $action = (New-PhoenixDeploymentPlan -RootPath $TestDrive).Actions | Where-Object Name -eq 'DarkMode'
         $action.Category | Should -Be 'Setting'
         $action.Action | Should -Be 'Apply'
     }
 
     It 'skips a setting already in the desired state' {
-        Mock -ModuleName DeploymentPlanner Test-PhoenixSettingApplied { $true }
+        Mock -ModuleName DeploymentPlanner Get-PhoenixState {
+            New-State -Settings @((New-SettingItem -Name 'DarkMode' -Status 'Applied'))
+        }
 
-        $plan = New-PhoenixDeploymentPlan -RootPath $TestDrive
-
-        ($plan.Actions | Where-Object Name -eq 'DarkMode').Action | Should -Be 'Skip'
+        (New-PhoenixDeploymentPlan -RootPath $TestDrive).Actions[0].Action | Should -Be 'Skip'
     }
 
     It 'defers an elevation-requiring setting when the process is not elevated' {
-        Mock -ModuleName DeploymentPlanner Get-PhoenixSettingManifest { @(New-SettingManifest -Name 'SecureBoot' -RequiresElevation $true) }
         Mock -ModuleName DeploymentPlanner Test-PhoenixElevated { $false }
+        Mock -ModuleName DeploymentPlanner Get-PhoenixState {
+            New-State -Settings @((New-SettingItem -Name 'Telemetry' -Status 'Modified' -RequiresElevation $true))
+        }
 
-        $plan = New-PhoenixDeploymentPlan -RootPath $TestDrive
-
-        $action = $plan.Actions | Where-Object Name -eq 'SecureBoot'
+        $action = (New-PhoenixDeploymentPlan -RootPath $TestDrive).Actions[0]
         $action.Action | Should -Be 'Defer'
         $action.Reason | Should -BeLike '*elevation*'
     }
 
     It 'marks an elevation-requiring setting apply as Medium risk when elevated' {
-        Mock -ModuleName DeploymentPlanner Get-PhoenixSettingManifest { @(New-SettingManifest -Name 'SecureBoot' -RequiresElevation $true) }
+        Mock -ModuleName DeploymentPlanner Get-PhoenixState {
+            New-State -Settings @((New-SettingItem -Name 'Telemetry' -Status 'Modified' -RequiresElevation $true))
+        }
 
         $plan = New-PhoenixDeploymentPlan -RootPath $TestDrive
-
-        $action = $plan.Actions | Where-Object Name -eq 'SecureBoot'
-        $action.Action | Should -Be 'Apply'
-        $action.Risk | Should -Be 'Medium'
+        $plan.Actions[0].Action | Should -Be 'Apply'
+        $plan.Actions[0].Risk | Should -Be 'Medium'
         $plan.Summary.Risk | Should -Be 'Medium'
     }
 
-    It 'excludes candidates the configuration has not enabled' {
-        Mock -ModuleName DeploymentPlanner Get-PhoenixConfigValue { $false }
+    It 'plans nothing when nothing is in scope' {
+        Mock -ModuleName DeploymentPlanner Get-PhoenixState { New-State }
 
         $plan = New-PhoenixDeploymentPlan -RootPath $TestDrive
-
         $plan.Actions.Count | Should -Be 0
         $plan.Summary.Changing | Should -Be 0
     }
@@ -122,11 +135,15 @@ Describe 'New-PhoenixDeploymentPlan' {
         $plan.Machine.FormFactor | Should -Be 'Desktop'
     }
 
-    It 'summarises counts and estimated time' {
-        Mock -ModuleName DeploymentPlanner Get-PhoenixApplicationManifest { @(New-AppManifest -Name 'Discord'), (New-AppManifest -Name 'OBS') }
+    It 'orders settings before applications and summarises counts and estimated time' {
+        Mock -ModuleName DeploymentPlanner Get-PhoenixState {
+            New-State -Applications @((New-AppItem -Name 'Discord' -Status 'Missing'), (New-AppItem -Name 'OBS' -Status 'Missing')) `
+                -Settings @((New-SettingItem -Name 'DarkMode' -Status 'Modified'))
+        }
 
         $plan = New-PhoenixDeploymentPlan -RootPath $TestDrive
 
+        $plan.Actions[0].Category | Should -Be 'Setting'
         $plan.Summary.Install | Should -Be 2
         $plan.Summary.Apply | Should -Be 1
         $plan.Summary.Changing | Should -Be 3
@@ -134,15 +151,15 @@ Describe 'New-PhoenixDeploymentPlan' {
     }
 
     Context 'profile scope' {
-        It 'plans over the profile applications, not the whole configuration' {
-            Mock -ModuleName DeploymentPlanner Get-PhoenixProfile { [PSCustomObject]@{ Name = 'Gaming'; Applications = @('Discord') } }
-            Mock -ModuleName DeploymentPlanner Expand-PhoenixProfileApplications { @(New-AppManifest -Name 'Discord') }
+        It 'passes the profile through to the State Engine and adopts its scope label' {
+            Mock -ModuleName DeploymentPlanner Get-PhoenixState {
+                New-State -Scope 'Profile: Gaming' -Applications @((New-AppItem -Name 'Discord' -Status 'Missing'))
+            }
 
             $plan = New-PhoenixDeploymentPlan -RootPath $TestDrive -ProfileName 'Gaming'
 
             $plan.Scope | Should -Be 'Profile: Gaming'
-            Should -Invoke -ModuleName DeploymentPlanner Expand-PhoenixProfileApplications -Times 1
-            ($plan.Actions | Where-Object Category -eq 'Application').Name | Should -Be 'Discord'
+            Should -Invoke -ModuleName DeploymentPlanner Get-PhoenixState -Times 1 -ParameterFilter { $ProfileName -eq 'Gaming' }
         }
     }
 }

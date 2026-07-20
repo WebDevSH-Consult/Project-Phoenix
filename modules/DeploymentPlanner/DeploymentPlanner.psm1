@@ -3,11 +3,20 @@
 
     Builds an explainable deployment plan from the machine's actual state and
     the work Phoenix can actually perform - "here is exactly what I will do,
-    and why" - without executing anything. The orchestration/brain layer over
-    the rest of the pipeline: it reuses the same predicates the executors use
-    (Test-PhoenixApplicationSatisfied, Test-PhoenixSettingApplied,
-    Get-PhoenixPreflightState, Test-PhoenixElevated), so the plan matches what
-    a real run would do.
+    and why" - without executing anything.
+
+    Current-vs-desired state comes from the State Engine (ADR 0018), the single
+    source of truth: Get-PhoenixState scopes the in-scope applications and
+    settings and evaluates each against its declaration. The planner adds only
+    the deploy-time decisions the State Engine does not own - deferral for an
+    unsafe preflight or missing elevation, ordering, estimates and risk - so
+    the plan still matches what a real run would do.
+
+    It asks for state with -SkipVersionCheck: an orchestrated run skips an
+    installed application whether or not a newer version exists, so planning
+    would not act on version currency, and querying WinGet per package would
+    cost minutes for no change in the plan. Upgrades are the repair path's job
+    (Invoke-PhoenixRepair), not deployment's.
 
     Plans only real actions - config/profile-gated application installs and
     Windows settings. It never invents capabilities Phoenix lacks. The plan
@@ -18,12 +27,9 @@
 #>
 
 Import-Module (Join-Path $PSScriptRoot '..\PhoenixCore\PhoenixCore.psd1')
-Import-Module (Join-Path $PSScriptRoot '..\PhoenixConfig\PhoenixConfig.psd1')
 Import-Module (Join-Path $PSScriptRoot '..\HardwareDetection\HardwareDetection.psd1')
 Import-Module (Join-Path $PSScriptRoot '..\Validation\Validation.psd1')
-Import-Module (Join-Path $PSScriptRoot '..\PhoenixBootstrap\PhoenixBootstrap.psd1')
-Import-Module (Join-Path $PSScriptRoot '..\WindowsConfig\WindowsConfig.psd1')
-Import-Module (Join-Path $PSScriptRoot '..\Installer\Installer.psd1')
+Import-Module (Join-Path $PSScriptRoot '..\StateEngine\StateEngine.psd1')
 
 # Coarse, declared estimate heuristics (ADR 0016) - placeholders, not measurements.
 $script:EstimateInstallSeconds = 120
@@ -37,10 +43,12 @@ function New-PhoenixDeploymentPlan {
         changing anything.
 
         .DESCRIPTION
-        Applications are selected by -ProfileName (expanded with dependencies)
-        or, without it, by configuration (ConfigFlag). Settings are always
-        selected by configuration. Uses the same predicates the executors use,
-        so the plan reflects what a real run would do. See ADR 0016.
+        Current-vs-desired state (and the scoping that selects what is in
+        scope - a profile with its dependencies, or configuration) comes from
+        the State Engine's Get-PhoenixState (ADR 0018). This function adds the
+        deploy-time decisions the State Engine does not own: deferral for an
+        unsafe preflight or missing elevation, ordering, estimates and risk.
+        The plan still reflects what a real run would do. See ADR 0016.
     #>
     [CmdletBinding()]
     [OutputType([PSCustomObject])]
@@ -51,53 +59,46 @@ function New-PhoenixDeploymentPlan {
         [string]$ProfileName
     )
 
-    $configuration = Get-PhoenixConfiguration -RootPath $RootPath
     $hardware = Get-PhoenixHardware
     $elevated = Test-PhoenixElevated
     $preflight = Get-PhoenixPreflightState
 
-    $appManifests = @(Get-PhoenixApplicationManifest -ManifestsPath (Join-Path $RootPath 'modules\Installer\Applications'))
-    $settingManifests = @(Get-PhoenixSettingManifest -ManifestsPath (Join-Path $RootPath 'modules\WindowsConfig\Settings'))
-
-    # Application scope: profile selection (with dependencies) or config gating.
-    if ($ProfileName) {
-        $workstationProfile = Get-PhoenixProfile -ProfilesPath (Join-Path $RootPath 'profiles') -ProfileName $ProfileName
-        $scopedApps = @(Expand-PhoenixProfileApplications -Manifests $appManifests -ApplicationNames $workstationProfile.Applications)
-        $scopeLabel = "Profile: $($workstationProfile.Name)"
-    }
-    else {
-        $scopedApps = @($appManifests | Where-Object { Get-PhoenixConfigValue -Configuration $configuration -Path $_.ConfigFlag })
-        $scopeLabel = 'Configuration'
-    }
-
-    $scopedSettings = @($settingManifests | Where-Object { Get-PhoenixConfigValue -Configuration $configuration -Path $_.ConfigFlag })
+    # Single source of truth for what is in scope and how it currently stands.
+    # -SkipVersionCheck: an orchestrated run skips an installed application
+    # whether or not a newer version exists, so the plan would be identical -
+    # and the per-package WinGet query costs minutes. Upgrades belong to
+    # Invoke-PhoenixRepair, not to deployment.
+    $state = Get-PhoenixState -RootPath $RootPath -ProfileName $ProfileName -SkipVersionCheck
 
     $preflightReason = ($preflight.Results | Where-Object Status -eq 'FAIL' | ForEach-Object { $_.Name }) -join ', '
 
     $actions = [System.Collections.Generic.List[PSCustomObject]]::new()
 
-    foreach ($manifest in $scopedSettings) {
-        if (Test-PhoenixSettingApplied -Manifest $manifest) {
-            $actions.Add([PSCustomObject]@{ Category = 'Setting'; Name = $manifest.Name; Action = 'Skip'; Reason = 'Already in the desired state.'; Risk = 'Low'; EstimatedSeconds = 0 })
+    foreach ($item in @($state.Settings)) {
+        $manifest = $item.Manifest
+        if ($item.Status -eq 'Applied') {
+            $actions.Add([PSCustomObject]@{ Category = 'Setting'; Name = $item.Name; Action = 'Skip'; Reason = 'Already in the desired state.'; Risk = 'Low'; EstimatedSeconds = 0 })
         }
         elseif ($manifest.RequiresElevation -and -not $elevated) {
-            $actions.Add([PSCustomObject]@{ Category = 'Setting'; Name = $manifest.Name; Action = 'Defer'; Reason = 'Requires elevation - re-run elevated to apply.'; Risk = 'Medium'; EstimatedSeconds = 0 })
+            $actions.Add([PSCustomObject]@{ Category = 'Setting'; Name = $item.Name; Action = 'Defer'; Reason = 'Requires elevation - re-run elevated to apply.'; Risk = 'Medium'; EstimatedSeconds = 0 })
         }
         else {
             $risk = if ($manifest.RequiresElevation) { 'Medium' } else { 'Low' }
-            $actions.Add([PSCustomObject]@{ Category = 'Setting'; Name = $manifest.Name; Action = 'Apply'; Reason = 'Not in the desired state.'; Risk = $risk; EstimatedSeconds = $script:EstimateApplySeconds })
+            $actions.Add([PSCustomObject]@{ Category = 'Setting'; Name = $item.Name; Action = 'Apply'; Reason = 'Not in the desired state.'; Risk = $risk; EstimatedSeconds = $script:EstimateApplySeconds })
         }
     }
 
-    foreach ($manifest in $scopedApps) {
-        if (Test-PhoenixApplicationSatisfied -Manifest $manifest) {
-            $actions.Add([PSCustomObject]@{ Category = 'Application'; Name = $manifest.Name; Action = 'Skip'; Reason = 'Already installed.'; Risk = 'Low'; EstimatedSeconds = 0 })
+    foreach ($item in @($state.Applications)) {
+        # Present and Outdated both mean "installed" - an orchestrated run
+        # skips either. Only Missing is a deployment action.
+        if ($item.Status -ne 'Missing') {
+            $actions.Add([PSCustomObject]@{ Category = 'Application'; Name = $item.Name; Action = 'Skip'; Reason = 'Already installed.'; Risk = 'Low'; EstimatedSeconds = 0 })
         }
         elseif (-not $preflight.Safe) {
-            $actions.Add([PSCustomObject]@{ Category = 'Application'; Name = $manifest.Name; Action = 'Defer'; Reason = "System not in a safe state for installation ($preflightReason)."; Risk = 'Low'; EstimatedSeconds = 0 })
+            $actions.Add([PSCustomObject]@{ Category = 'Application'; Name = $item.Name; Action = 'Defer'; Reason = "System not in a safe state for installation ($preflightReason)."; Risk = 'Low'; EstimatedSeconds = 0 })
         }
         else {
-            $actions.Add([PSCustomObject]@{ Category = 'Application'; Name = $manifest.Name; Action = 'Install'; Reason = 'Not installed.'; Risk = 'Low'; EstimatedSeconds = $script:EstimateInstallSeconds })
+            $actions.Add([PSCustomObject]@{ Category = 'Application'; Name = $item.Name; Action = 'Install'; Reason = 'Not installed.'; Risk = 'Low'; EstimatedSeconds = $script:EstimateInstallSeconds })
         }
     }
 
@@ -115,7 +116,7 @@ function New-PhoenixDeploymentPlan {
             Gpus         = @($hardware.Gpus | ForEach-Object { "$($_.Name) [$($_.Vendor)]" })
             MemoryGB     = $hardware.MemoryGB
         }
-        Scope         = $scopeLabel
+        Scope         = $state.Scope
         Elevated      = $elevated
         PreflightSafe = $preflight.Safe
         Actions       = $actionArray

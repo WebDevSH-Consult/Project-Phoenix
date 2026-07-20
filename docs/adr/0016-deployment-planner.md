@@ -25,6 +25,10 @@ Each candidate becomes a plan action `{ Category, Name, Action, Reason, Risk, Es
 
 This reuses the exact predicates the executors use (`Test-PhoenixApplicationSatisfied`, `Test-PhoenixSettingApplied`, `Get-PhoenixPreflightState`, `Test-PhoenixElevated`), so the plan matches what a real run would do.
 
+> **Amended by ADR [0018](0018-desired-state-drift-management.md) (slice 3).** Current-vs-desired state and scoping now come from the State Engine's `Get-PhoenixState` rather than the planner calling those first two predicates and loading/scoping manifests itself. The planner keeps the deploy-time decisions the State Engine does not own — deferral for unsafe preflight or missing elevation, ordering, estimates, risk. This is a **dedupe, not a semantics change**: the rendered plan is byte-identical before and after.
+>
+> Two fidelity points follow from it. An application the State Engine reports as `Outdated` still plans as **`Skip` ("already installed")**, because an orchestrated run genuinely skips an installed application and never upgrades — upgrades belong to `Invoke-PhoenixRepair` (ADR 0018), and a plan claiming "Upgrade" would stop matching a real run. And because the planner treats `Outdated` and `Present` identically, it requests state with `-SkipVersionCheck`, avoiding a per-package WinGet query that costs minutes and could not change the plan.
+
 ### Estimates and risk are honest coarse heuristics
 `EstimatedSeconds` and `Risk` are **declared placeholders**, not measurements: a fixed per-action-type estimate (install ≈ 120 s, setting apply ≈ 5 s, skip/defer = 0) and a simple risk rule (machine-scope/elevation-requiring applies → `Medium`, else `Low`). The plan and this ADR both mark them as rough. Real duration/bandwidth/disk/risk modelling is future work (the proposal lists them under "future expansion"); the framework carries the fields so refining them later changes no other module.
 

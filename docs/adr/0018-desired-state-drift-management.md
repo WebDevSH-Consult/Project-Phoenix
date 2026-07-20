@@ -54,6 +54,10 @@ Detect (Hardware) → Validate → **State Engine** → Planner → Execute → 
 2. **Slice 2** — `Invoke-PhoenixRepair` (repair only drift via idempotent apply, preflight-gated, `-Transactional`-aware). *Phoenix now maintains.*
 3. **Slice 3** — refactor the Deployment Planner to consume the State Engine, making it the single source of truth.
 
+   *Delivered.* `New-PhoenixDeploymentPlan` now calls `Get-PhoenixState` instead of loading manifests, applying its own scoping, and calling `Test-PhoenixApplicationSatisfied` / `Test-PhoenixSettingApplied` itself; it keeps only the deploy-time decisions (deferral, ordering, estimates, risk) and drops its `PhoenixConfig`, `PhoenixBootstrap`, `WindowsConfig`, and `Installer` imports. Verified as a pure dedupe: the rendered plan is **byte-identical** before and after on a live machine.
+
+   Two consequences worth recording. An `Outdated` application still plans as `Skip` — an orchestrated run never upgrades, so planning an "Upgrade" would break ADR 0016's promise that the plan matches a real run; upgrades are `Invoke-PhoenixRepair`'s job. And because the planner treats `Outdated` and `Present` identically, `Get-PhoenixState` gained **`-SkipVersionCheck`**, letting a caller that would not act on version currency skip the slow per-package WinGet query. Audit and repair use the full check.
+
 ## Alternatives Considered
 - **Advanced validation slices first**: valuable but incremental — improvements to an existing module. The State Engine is foundational and subsumes much of "validation as drift"; it should come first so later features share one comparison.
 - **A persisted desired-state / golden-snapshot store now**: deferred. The manifests already declare desired state; a snapshot store is a future capability (golden comparison, point-in-time compliance) that fits behind the same functions.
