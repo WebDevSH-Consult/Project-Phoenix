@@ -2,7 +2,7 @@
 
 > A fully automated, AI-powered Windows workstation platform that can rebuild itself from a clean Windows installation.
 
-[![Version](https://img.shields.io/badge/version-0.8.0--hardening-orange)](./CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-0.9.0--hardening-orange)](./CHANGELOG.md)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue)](./LICENSE)
 
 Project Phoenix is not a script. It is a platform: a modular, version-controlled, self-validating system for building, configuring, and maintaining a Windows workstation as Infrastructure-as-Code.
@@ -67,4 +67,10 @@ See [CONTRIBUTING.md](./CONTRIBUTING.md) for the full branch strategy, commit st
 
 ## Status
 
-**Version 0.8.0 — Configuration, Reporting & Hardening.** The numbered roadmap (0.1–0.9) is complete: orchestration, application installer, workstation profiles, Windows Configuration (`modules/WindowsConfig`), and the Health Dashboard (HTML + JSON deployment reports). Plus hardware detection (`Get-PhoenixHardware`), an installer preflight safety gate, and a detect-and-declare elevation strategy. The project is now in its **production-hardening** phase — installer completeness, recovery/rollback, and v1.0 readiness — with every module following the deployment pipeline defined in [ARCHITECTURE.md](./ARCHITECTURE.md). See [ROADMAP.md](./ROADMAP.md).
+**Version 0.9.0 — Planning, Recovery & Configuration Management.** The numbered roadmap (0.1–0.9) is complete, and Phoenix has crossed from *provisioning* into *configuration management*:
+
+- **It plans before it acts.** `Bootstrap.ps1 -Plan` builds an explainable, exportable deployment plan — every action with a reason — and exits without executing. Review before deploy ([ADR 0016](./docs/adr/0016-deployment-planner.md)).
+- **It undoes what it did.** `Invoke-PhoenixRollback` reverses a past deployment; `Bootstrap.ps1 -Transactional` makes a run all-or-nothing, automatically reversing its own changes if any module fails ([ADR 0015](./docs/adr/0015-recovery-rollback-engine.md), [0017](./docs/adr/0017-automatic-transactional-rollback.md)).
+- **It maintains, not just deploys.** `Invoke-PhoenixAudit` detects drift from declared state; `Invoke-PhoenixRepair` fixes *only* the drift — never a reinstall it doesn't need ([ADR 0018](./docs/adr/0018-desired-state-drift-management.md)).
+
+On top of the 0.8.0 foundation: orchestration, the manifest-driven installer (now with dry-run, upgrade and uninstall), workstation profiles, Windows Configuration, the Health Dashboard, hardware detection, the installer preflight gate, and a detect-and-declare elevation strategy. Every module follows the deployment pipeline defined in [ARCHITECTURE.md](./ARCHITECTURE.md). Remaining work toward 1.0 is polish rather than capability. See [ROADMAP.md](./ROADMAP.md).
