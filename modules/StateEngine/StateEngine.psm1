@@ -13,9 +13,10 @@
     version currency (WinGet), and registry settings. Drivers and services are
     out of scope until their manifest capabilities exist.
 
-    Slice 1 (this file): Get-PhoenixState, Compare-PhoenixState,
-    Invoke-PhoenixAudit - all read-only. Invoke-PhoenixRepair follows in
-    slice 2.
+    Slice 1: Get-PhoenixState, Compare-PhoenixState, Invoke-PhoenixAudit -
+    all read-only. Slice 2: Invoke-PhoenixRepair - re-apply desired state for
+    ONLY the drifted items, through the existing idempotent apply/install/
+    upgrade functions.
 
     Operator-invoked (the maintain path), not an orchestrated forward stage -
     no module.json. Depends on PhoenixLogging; imports the capability modules
@@ -23,8 +24,10 @@
 #>
 
 Import-Module (Join-Path $PSScriptRoot '..\PhoenixConfig\PhoenixConfig.psd1')
+Import-Module (Join-Path $PSScriptRoot '..\Validation\Validation.psd1')
 Import-Module (Join-Path $PSScriptRoot '..\WindowsConfig\WindowsConfig.psd1')
 Import-Module (Join-Path $PSScriptRoot '..\Installer\Installer.psd1')
+Import-Module (Join-Path $PSScriptRoot '..\Recovery\Recovery.psd1')
 
 # The conforming (no-drift) status for each category.
 $script:ConformingApplicationStatus = 'Present'
@@ -205,4 +208,123 @@ function Invoke-PhoenixAudit {
     return $drift
 }
 
-Export-ModuleMember -Function Get-PhoenixState, Compare-PhoenixState, Invoke-PhoenixAudit
+function Invoke-PhoenixRepair {
+    <#
+        .SYNOPSIS
+        Repairs drift: re-applies desired state for ONLY the items that have
+        drifted, through the existing idempotent apply/install/upgrade
+        functions. Never a profile redeploy.
+
+        .DESCRIPTION
+        Audits for drift, then repairs each drifted item and nothing else -
+        a Missing application is installed, an Outdated one upgraded, a
+        Modified setting re-applied. Every repair reuses the module that owns
+        that change (Install-PhoenixApplication, Update-PhoenixApplication,
+        Set-PhoenixSetting), so each is idempotent and self-verifying; this
+        function adds selection and ordering, not new mutation logic.
+
+        Settings are repaired before applications (forward deployment order).
+        Application repairs are gated by the installer preflight (ADR 0012) -
+        nothing installs on a non-idle servicing state - while setting repairs
+        proceed regardless, since a registry write is not an installation.
+        Elevation is handled inside Set-PhoenixSetting (WARN-skip, ADR 0013).
+
+        -DryRun previews the repairs without invoking any backend. With
+        -Transactional, a failed repair reverses the repairs that changed
+        (via the Recovery engine, ADR 0017). Note that a *version* repair is
+        not reversible - Update-PhoenixApplication reports no Changed flag,
+        because undoing an upgrade by uninstalling would destroy an
+        application that was legitimately installed before the repair.
+
+        .EXAMPLE
+        Invoke-PhoenixRepair -RootPath (Get-Location) -DryRun
+    #>
+    [CmdletBinding()]
+    [OutputType([PSCustomObject[]])]
+    param(
+        [Parameter(Mandatory)]
+        [string]$RootPath,
+
+        [string]$ProfileName,
+
+        [switch]$DryRun,
+
+        [switch]$Transactional,
+
+        [switch]$SkipPreflight
+    )
+
+    $state = Get-PhoenixState -RootPath $RootPath -ProfileName $ProfileName
+    $drift = Compare-PhoenixState -State $state
+
+    if (-not $drift.InDrift) {
+        Write-PhoenixLog -Level SUCCESS -Message '[StateEngine] No drift detected - nothing to repair.'
+        return @()
+    }
+
+    # Forward order: settings first, then applications.
+    $settingDrift = @($drift.Drift | Where-Object Category -eq 'Setting')
+    $appDrift = @($drift.Drift | Where-Object Category -eq 'Application')
+
+    Write-PhoenixLog -Level INFO -Message "[StateEngine] Repairing $($drift.Summary.Total) drifted item(s): $($settingDrift.Count) setting(s), $($appDrift.Count) application(s)."
+
+    # Preflight gates application repairs only (ADR 0012).
+    $appsBlockedReason = $null
+    if ($appDrift.Count -gt 0 -and -not $DryRun -and -not $SkipPreflight) {
+        $preflight = Get-PhoenixPreflightState
+        if (-not $preflight.Safe) {
+            $appsBlockedReason = (($preflight.Results | Where-Object Status -eq 'FAIL' | ForEach-Object { $_.Name }) -join ', ')
+            Write-PhoenixLog -Level WARNING -Message "[StateEngine] Preflight not safe ($appsBlockedReason) - application repairs skipped. Setting repairs continue."
+        }
+    }
+
+    $results = [System.Collections.Generic.List[PSCustomObject]]::new()
+
+    foreach ($item in $settingDrift) {
+        if ($DryRun) {
+            $results.Add([PSCustomObject]@{ Category = 'Setting'; Name = $item.Name; Status = 'WARN'; Message = 'DRY RUN - would re-apply this setting.'; Changed = $false })
+            continue
+        }
+        $results.Add((Set-PhoenixSetting -Manifest $item.Manifest))
+    }
+
+    foreach ($item in $appDrift) {
+        $verb = if ($item.DriftType -eq 'Outdated') { 'upgrade' } else { 'install' }
+
+        if ($DryRun) {
+            $results.Add([PSCustomObject]@{ Category = 'Application'; Name = $item.Name; Status = 'WARN'; Message = "DRY RUN - would $verb this application."; Changed = $false })
+            continue
+        }
+        if ($appsBlockedReason) {
+            $results.Add([PSCustomObject]@{ Category = 'Application'; Name = $item.Name; Status = 'WARN'; Message = "Skipped - system not in a safe state for installation ($appsBlockedReason)."; Changed = $false })
+            continue
+        }
+
+        if ($item.DriftType -eq 'Outdated') {
+            $results.Add((Update-PhoenixApplication -Manifest $item.Manifest))
+        }
+        else {
+            $results.Add((Install-PhoenixApplication -Manifest $item.Manifest))
+        }
+    }
+
+    $resultArray = $results.ToArray()
+    $failed = @($resultArray | Where-Object Status -eq 'FAIL')
+
+    if ($Transactional -and $failed.Count -gt 0) {
+        Write-PhoenixLog -Level ERROR -Message "[StateEngine] Repair failed for $($failed.Count) item(s) - reversing the repairs that changed..."
+        # Wrap the repair results in the health-result shape the rollback
+        # engine consumes; only Changed = $true entries are reversed.
+        $null = Invoke-PhoenixRollbackFromResults -Results @([PSCustomObject]@{ Module = 'StateEngine'; Details = $resultArray }) -RootPath $RootPath
+    }
+    elseif ($failed.Count -gt 0) {
+        Write-PhoenixLog -Level WARNING -Message "[StateEngine] Repair completed with $($failed.Count) failure(s) out of $($resultArray.Count) item(s)."
+    }
+    else {
+        Write-PhoenixLog -Level SUCCESS -Message "[StateEngine] Repair complete: $($resultArray.Count) item(s) processed."
+    }
+
+    return $resultArray
+}
+
+Export-ModuleMember -Function Get-PhoenixState, Compare-PhoenixState, Invoke-PhoenixAudit, Invoke-PhoenixRepair
