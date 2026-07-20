@@ -4,6 +4,14 @@ All notable changes to this project are documented in this file. Format follows 
 
 ## [Unreleased]
 
+### Changed
+- Desired State & Drift Management Engine — Slice 3: the **Deployment Planner now consumes the State Engine** (ADR [0018](docs/adr/0018-desired-state-drift-management.md), amending ADR [0016](docs/adr/0016-deployment-planner.md)). `New-PhoenixDeploymentPlan` calls `Get-PhoenixState` for current-vs-desired state *and* scoping, instead of loading manifests, applying its own profile/config scoping, and calling `Test-PhoenixApplicationSatisfied`/`Test-PhoenixSettingApplied` itself. Deployment and maintenance now answer "what is the current state?" from one implementation.
+  - The planner keeps only the deploy-time decisions the State Engine does not own — deferral (unsafe preflight, missing elevation), ordering, estimates, risk — and drops its `PhoenixConfig`, `PhoenixBootstrap`, `WindowsConfig`, and `Installer` imports.
+  - **A pure dedupe, not a semantics change**: verified on a live machine, the rendered plan is byte-identical before and after the refactor.
+  - An `Outdated` application still plans as `Skip` ("already installed") — an orchestrated run genuinely skips an installed application and never upgrades, so planning an "Upgrade" would break ADR 0016's promise that the plan matches a real run. Upgrades belong to `Invoke-PhoenixRepair`.
+  - `Get-PhoenixState` gained **`-SkipVersionCheck`** (installed apps report `Present` without querying WinGet). The planner uses it: it treats `Outdated` and `Present` identically, so the per-package WinGet query would cost minutes and could not change the plan. Audit and repair use the full check.
+  - Planner tests re-pointed at the new seam (`Get-PhoenixState`), plus new coverage for the `Outdated`→`Skip` fidelity rule and the `-SkipVersionCheck` request.
+
 ### Added
 - Desired State & Drift Management Engine — Slice 2: **repair** (ADR [0018](docs/adr/0018-desired-state-drift-management.md), PHX-004). `Invoke-PhoenixRepair -RootPath [-ProfileName] [-DryRun] [-Transactional] [-SkipPreflight]` re-applies desired state for **only** the drifted items — never a profile redeploy, never touching what is already correct. Phoenix now *fixes*, not just *knows*.
   - Each fix reuses the module that owns that change — `Missing` → `Install-PhoenixApplication`, `Outdated` → `Update-PhoenixApplication`, `Modified` → `Set-PhoenixSetting` — so every repair is idempotent and self-verifying. The State Engine adds *selection and ordering*, not new mutation logic.
