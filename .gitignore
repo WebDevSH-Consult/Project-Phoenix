@@ -9,3 +9,6 @@ reports/*
 
 plans/*
 !plans/.gitkeep
+
+audits/*
+!audits/.gitkeep
