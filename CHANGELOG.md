@@ -2,7 +2,9 @@
 
 All notable changes to this project are documented in this file. Format follows [Keep a Changelog](https://keepachangelog.com/), and versioning follows [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [0.9.0] - Planning, Recovery & Configuration Management
+
+Phoenix crosses from *provisioning* into *configuration management*. Three capabilities define this release: it **plans before it acts** (an explainable, reviewable deployment plan), it **undoes what it did** (operator-invoked rollback, and all-or-nothing transactional runs), and it **maintains rather than only deploys** (drift detection and repair-only-the-difference). Rounding these out: the Application Deployment Engine is now feature-complete (dry-run, upgrade, uninstall).
 
 ### Changed
 - Desired State & Drift Management Engine — Slice 3: the **Deployment Planner now consumes the State Engine** (ADR [0018](docs/adr/0018-desired-state-drift-management.md), amending ADR [0016](docs/adr/0016-deployment-planner.md)). `New-PhoenixDeploymentPlan` calls `Get-PhoenixState` for current-vs-desired state *and* scoping, instead of loading manifests, applying its own profile/config scoping, and calling `Test-PhoenixApplicationSatisfied`/`Test-PhoenixSettingApplied` itself. Deployment and maintenance now answer "what is the current state?" from one implementation.
