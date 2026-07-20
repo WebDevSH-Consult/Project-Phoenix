@@ -169,3 +169,138 @@ Describe 'Invoke-PhoenixAudit (ADR 0018)' {
         (Invoke-PhoenixAudit -RootPath $root).InDrift | Should -BeFalse
     }
 }
+
+Describe 'Invoke-PhoenixRepair (ADR 0018 slice 2)' {
+    BeforeAll {
+        Import-Module "$PSScriptRoot/../modules/PhoenixLogging/PhoenixLogging.psd1" -Force
+        Import-Module "$PSScriptRoot/../modules/StateEngine/StateEngine.psd1" -Force
+        Initialize-PhoenixLog -LogDirectory (Join-Path $TestDrive 'logs')
+
+        function New-DriftState {
+            param([object[]]$Applications = @(), [object[]]$Settings = @())
+            [PSCustomObject]@{ Timestamp = 'now'; ComputerName = 'TESTPC'; Scope = 'Configuration'; Applications = @($Applications); Settings = @($Settings) }
+        }
+        function New-MissingApp { param([string]$Name) [PSCustomObject]@{ Category = 'Application'; Name = $Name; Status = 'Missing'; Manifest = [PSCustomObject]@{ Name = $Name; Installer = 'Winget'; Id = "$Name.Id" } } }
+        function New-OutdatedApp { param([string]$Name) [PSCustomObject]@{ Category = 'Application'; Name = $Name; Status = 'Outdated'; Manifest = [PSCustomObject]@{ Name = $Name; Installer = 'Winget'; Id = "$Name.Id" } } }
+        function New-ModifiedSetting { param([string]$Name) [PSCustomObject]@{ Category = 'Setting'; Name = $Name; Status = 'Modified'; Manifest = [PSCustomObject]@{ Name = $Name; Type = 'Registry' } } }
+    }
+
+    BeforeEach {
+        Mock -ModuleName StateEngine Get-PhoenixPreflightState { [PSCustomObject]@{ Safe = $true; Results = @() } }
+        Mock -ModuleName StateEngine Set-PhoenixSetting { [PSCustomObject]@{ Category = 'Setting'; Name = $Manifest.Name; Status = 'PASS'; Message = 'Applied'; PreviousValue = 0; Changed = $true } }
+        Mock -ModuleName StateEngine Install-PhoenixApplication { [PSCustomObject]@{ Category = 'Application'; Name = $Manifest.Name; Status = 'PASS'; Message = 'Installed'; Changed = $true } }
+        Mock -ModuleName StateEngine Update-PhoenixApplication { [PSCustomObject]@{ Category = 'Application'; Name = $Manifest.Name; Status = 'PASS'; Message = 'Upgraded' } }
+        Mock -ModuleName StateEngine Invoke-PhoenixRollbackFromResults { @() }
+    }
+
+    It 'repairs only the drifted items, leaving conforming ones untouched' {
+        Mock -ModuleName StateEngine Get-PhoenixState {
+            New-DriftState -Applications @(
+                (New-MissingApp -Name 'Git')
+                [PSCustomObject]@{ Category = 'Application'; Name = 'Discord'; Status = 'Present'; Manifest = $null }
+            ) -Settings @(
+                (New-ModifiedSetting -Name 'DarkMode')
+                [PSCustomObject]@{ Category = 'Setting'; Name = 'HiddenFiles'; Status = 'Applied'; Manifest = $null }
+            )
+        }
+
+        $results = Invoke-PhoenixRepair -RootPath $TestDrive
+
+        $results.Count | Should -Be 2
+        $results.Name | Should -Contain 'Git'
+        $results.Name | Should -Contain 'DarkMode'
+        $results.Name | Should -Not -Contain 'Discord'
+        Should -Invoke -ModuleName StateEngine Install-PhoenixApplication -Times 1
+        Should -Invoke -ModuleName StateEngine Set-PhoenixSetting -Times 1
+    }
+
+    It 'installs a Missing application and upgrades an Outdated one' {
+        Mock -ModuleName StateEngine Get-PhoenixState {
+            New-DriftState -Applications @((New-MissingApp -Name 'Git'), (New-OutdatedApp -Name 'Steam'))
+        }
+
+        $null = Invoke-PhoenixRepair -RootPath $TestDrive
+
+        Should -Invoke -ModuleName StateEngine Install-PhoenixApplication -Times 1
+        Should -Invoke -ModuleName StateEngine Update-PhoenixApplication -Times 1
+    }
+
+    It 'repairs settings before applications (forward deployment order)' {
+        Mock -ModuleName StateEngine Get-PhoenixState {
+            New-DriftState -Applications @((New-MissingApp -Name 'Git')) -Settings @((New-ModifiedSetting -Name 'DarkMode'))
+        }
+
+        $results = Invoke-PhoenixRepair -RootPath $TestDrive
+
+        $results[0].Category | Should -Be 'Setting'
+        $results[1].Category | Should -Be 'Application'
+    }
+
+    It 'does nothing when there is no drift' {
+        Mock -ModuleName StateEngine Get-PhoenixState {
+            New-DriftState -Applications @([PSCustomObject]@{ Category = 'Application'; Name = 'Git'; Status = 'Present'; Manifest = $null })
+        }
+
+        @(Invoke-PhoenixRepair -RootPath $TestDrive).Count | Should -Be 0
+        Should -Invoke -ModuleName StateEngine Install-PhoenixApplication -Times 0
+    }
+
+    It 'previews without invoking any backend under -DryRun' {
+        Mock -ModuleName StateEngine Get-PhoenixState {
+            New-DriftState -Applications @((New-MissingApp -Name 'Git')) -Settings @((New-ModifiedSetting -Name 'DarkMode'))
+        }
+
+        $results = Invoke-PhoenixRepair -RootPath $TestDrive -DryRun
+
+        $results.Count | Should -Be 2
+        @($results | Where-Object Status -eq 'WARN').Count | Should -Be 2
+        $results[1].Message | Should -Match 'would install'
+        Should -Invoke -ModuleName StateEngine Install-PhoenixApplication -Times 0
+        Should -Invoke -ModuleName StateEngine Set-PhoenixSetting -Times 0
+    }
+
+    It 'blocks application repairs when preflight is unsafe, but still repairs settings' {
+        Mock -ModuleName StateEngine Get-PhoenixPreflightState {
+            [PSCustomObject]@{ Safe = $false; Results = @([PSCustomObject]@{ Name = 'PendingReboot'; Status = 'FAIL' }) }
+        }
+        Mock -ModuleName StateEngine Get-PhoenixState {
+            New-DriftState -Applications @((New-MissingApp -Name 'Git')) -Settings @((New-ModifiedSetting -Name 'DarkMode'))
+        }
+
+        $results = Invoke-PhoenixRepair -RootPath $TestDrive
+
+        ($results | Where-Object Name -eq 'Git').Status | Should -Be 'WARN'
+        ($results | Where-Object Name -eq 'Git').Message | Should -Match 'PendingReboot'
+        ($results | Where-Object Name -eq 'DarkMode').Status | Should -Be 'PASS'
+        Should -Invoke -ModuleName StateEngine Install-PhoenixApplication -Times 0
+        Should -Invoke -ModuleName StateEngine Set-PhoenixSetting -Times 1
+    }
+
+    It 'proceeds with application repairs when preflight is bypassed' {
+        Mock -ModuleName StateEngine Get-PhoenixPreflightState { throw 'should not be called' }
+        Mock -ModuleName StateEngine Get-PhoenixState { New-DriftState -Applications @((New-MissingApp -Name 'Git')) }
+
+        $null = Invoke-PhoenixRepair -RootPath $TestDrive -SkipPreflight
+
+        Should -Invoke -ModuleName StateEngine Install-PhoenixApplication -Times 1
+    }
+
+    It 'reverses the repairs that changed when -Transactional and a repair fails' {
+        Mock -ModuleName StateEngine Install-PhoenixApplication { [PSCustomObject]@{ Category = 'Application'; Name = $Manifest.Name; Status = 'FAIL'; Message = 'install failed'; Changed = $false } }
+        Mock -ModuleName StateEngine Get-PhoenixState {
+            New-DriftState -Applications @((New-MissingApp -Name 'Git')) -Settings @((New-ModifiedSetting -Name 'DarkMode'))
+        }
+
+        $null = Invoke-PhoenixRepair -RootPath $TestDrive -Transactional
+
+        Should -Invoke -ModuleName StateEngine Invoke-PhoenixRollbackFromResults -Times 1
+    }
+
+    It 'does not reverse anything when every repair succeeds' {
+        Mock -ModuleName StateEngine Get-PhoenixState { New-DriftState -Settings @((New-ModifiedSetting -Name 'DarkMode')) }
+
+        $null = Invoke-PhoenixRepair -RootPath $TestDrive -Transactional
+
+        Should -Invoke -ModuleName StateEngine Invoke-PhoenixRollbackFromResults -Times 0
+    }
+}
