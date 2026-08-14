@@ -244,6 +244,12 @@ Describe 'Install-PhoenixApplications' {
         Import-Module "$PSScriptRoot/../modules/PhoenixBootstrap/PhoenixBootstrap.psd1" -Force
         Import-Module "$PSScriptRoot/../modules/Installer/Installer.psd1" -Force
         Initialize-PhoenixLog -LogDirectory (Join-Path $TestDrive 'logs')
+
+        # Keep these tests hermetic: pin the preflight gate to "safe" so they
+        # exercise the install/ordering logic regardless of the host's real
+        # servicing state (a pending reboot/file-op would otherwise short-
+        # circuit the run). The gate itself is covered by its own Describe.
+        Mock -ModuleName Installer Get-PhoenixPreflightState { [PSCustomObject]@{ Safe = $true; Results = @() } }
     }
 
     It 'only installs manifests enabled by configuration' {
@@ -440,6 +446,11 @@ Describe 'Invoke-PhoenixProfile' {
         Import-Module "$PSScriptRoot/../modules/PhoenixBootstrap/PhoenixBootstrap.psd1" -Force
         Import-Module "$PSScriptRoot/../modules/Installer/Installer.psd1" -Force
         Initialize-PhoenixLog -LogDirectory (Join-Path $TestDrive 'logs')
+
+        # Keep these tests hermetic: pin the preflight gate to "safe" so they
+        # exercise the profile logic regardless of the host's real servicing
+        # state. The gate itself is covered by its own Describe.
+        Mock -ModuleName Installer Get-PhoenixPreflightState { [PSCustomObject]@{ Safe = $true; Results = @() } }
     }
 
     It 'installs every application the real Gaming profile lists, without touching ConfigFlags' {
