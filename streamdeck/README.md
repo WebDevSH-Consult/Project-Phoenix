@@ -1,6 +1,6 @@
 # Phoenix Remote — Stream Deck plugin
 
-Controls **Streamlabs Desktop on a separate streaming PC** from a Stream Deck plugged into the gaming PC, over the local network. See [ADR 0019](../docs/adr/0019-stream-deck-remote-control.md) for why it is built this way.
+Controls **Streamlabs Desktop on a separate streaming PC** from a Stream Deck plugged into the gaming PC, over the local network, and **SteelSeries Sonar on the gaming PC** for audio: what Kick viewers hear, what you hear, and who your mic talks to. See [ADR 0019](../docs/adr/0019-stream-deck-remote-control.md) for why it is built this way.
 
 ![Key states](preview.png)
 
@@ -16,7 +16,23 @@ Controls **Streamlabs Desktop on a separate streaming PC** from a Stream Deck pl
 | Mute Audio Source | `AudioSource.setMuted` | `MUTED` red |
 | Connection Status | Press to reconnect | Connected / Check token / Offline |
 
-Every key shows `NO LINK` when Streamlabs can't be reached, and pressing it then does nothing but flash an alert.
+Every Streamlabs key shows `NO LINK` when Streamlabs can't be reached, and pressing it then does nothing but flash an alert.
+
+### Audio page (SteelSeries Sonar)
+
+The profile has two pages. **Audio** (bottom-right key on the main page) needs Sonar in **Streamer mode**, where each channel has a *Streaming* mix (sent to the streaming PC, arriving in Streamlabs as "Gaming PC Audio") and a *Monitoring* mix (your headset).
+
+| Row | Keys | What a press does |
+|---|---|---|
+| Kick viewers hear | Game · Game chat · Discord · Music · Mic | Puts the channel on or off the stream mix (`ON AIR` / `OFF AIR`) |
+| You hear | Game · Game chat · Discord · Music · Deafen all | Mutes the channel in your headset (`MUTED` / `DEAFENED`) |
+| Mic talks to | ◀ Main · Everyone · Kick only · Discord only · Party mode | The active mode shows `NOW` |
+
+- **Game chat** is Sonar's **Aux** channel. Set a game's *voice chat output* device to "SteelSeries Sonar - Aux" to separate in-game voice from game sound.
+- **Discord** is Sonar's **Chat** channel; Discord's input device should be "SteelSeries Sonar - Microphone".
+- **Kick only** mutes the mic going to Discord; **Discord only** takes the mic off the stream and stops viewers hearing Discord and game chat; **Party mode** is Everyone plus viewers hearing Discord and game chat.
+
+Sonar's port changes each time it starts; the plugin finds it through SteelSeries GG on `127.0.0.1` and never contacts anything else. Keys show `NO SONAR` if GG isn't running and `CLASSIC` if Sonar is in Classic mode.
 
 ## Network
 

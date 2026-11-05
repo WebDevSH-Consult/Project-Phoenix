@@ -31,6 +31,8 @@ function rasterise(svg, outPng, size) {
 	const svgFile = join(work, `icon-${size}-${Math.random().toString(36).slice(2)}.svg`);
 	writeFileSync(svgFile, svg);
 	mkdirSync(dirname(outPng), { recursive: true });
+	// Remove the old PNG first, or the wait below would pass on a stale file.
+	rmSync(outPng, { force: true });
 	execFileSync(edge, [
 		'--headless=new', '--disable-gpu', '--hide-scrollbars', '--no-first-run',
 		`--user-data-dir=${profile}`,
@@ -62,17 +64,29 @@ const KEY_DEFAULTS = {
 	replaysave: { glyph: 'clip', label: 'Save clip', mode: 'idle' },
 	scene: { glyph: 'scene', label: 'Scene', mode: 'idle' },
 	mute: { glyph: 'mic', label: 'Mute', mode: 'idle' },
-	status: { glyph: 'emblem', label: 'Phoenix', mode: 'idle' }
+	status: { glyph: 'emblem', label: 'Phoenix', mode: 'idle' },
+	viewers: { glyph: 'mixer', label: 'Viewers hear', mode: 'idle' },
+	headset: { glyph: 'headset', label: 'Headset', mode: 'idle' },
+	talk: { glyph: 'mic', label: 'Mic talks to', mode: 'idle' }
 };
 const LIST_GLYPHS = {
 	stream: 'broadcast', record: 'record', replaybuffer: 'buffer', replaysave: 'clip',
-	scene: 'scene', mute: 'mic', status: 'emblem'
+	scene: 'scene', mute: 'mic', status: 'emblem', viewers: 'mixer', headset: 'headset', talk: 'people'
+};
+// Artwork for Stream Deck's built-in page keys (copied into the profile by the installer).
+const PAGE_KEYS = {
+	'page-audio': { glyph: 'mixer', label: 'Audio', mode: 'active' },
+	'page-main': { glyph: 'back', label: 'Main', mode: 'idle' }
 };
 
 const images = join(pluginDir, 'images');
 for (const [name, opts] of Object.entries(KEY_DEFAULTS)) {
 	pair(icons.key(opts), join(images, 'keys', name), 72);
 	pair(icons.listIcon(LIST_GLYPHS[name]), join(images, 'actions', name), 20);
+	console.log('built', name);
+}
+for (const [name, opts] of Object.entries(PAGE_KEYS)) {
+	pair(icons.key(opts), join(images, 'keys', name), 72);
 	console.log('built', name);
 }
 pair(icons.listIcon('emblem'), join(images, 'category'), 28);
@@ -93,7 +107,22 @@ if (process.argv.includes('--preview')) {
 		['Mic', { glyph: 'mic', label: 'Mic', mode: 'idle' }],
 		['Mic muted', { glyph: 'micOff', label: 'Mic', mode: 'live', badge: 'MUTED' }],
 		['Connected', { glyph: 'emblem', label: 'Connected', mode: 'ok' }],
-		['No link', { glyph: 'scene', label: 'Be Right Back', mode: 'off', dim: true, badge: 'NO LINK', badgeColor: C.red }]
+		['No link', { glyph: 'scene', label: 'Be Right Back', mode: 'off', dim: true, badge: 'NO LINK', badgeColor: C.red }],
+		['Game on stream', { glyph: 'gamepad', label: 'Game', mode: 'active', badge: 'ON AIR', badgeColor: C.magenta }],
+		['Game chat off', { glyph: 'gamechat', label: 'Game chat', mode: 'idle', slash: true, dim: true, badge: 'OFF AIR', badgeColor: '#4A4470' }],
+		['Discord on stream', { glyph: 'chat', label: 'Discord', mode: 'active', badge: 'ON AIR', badgeColor: C.magenta }],
+		['Music off', { glyph: 'music', label: 'Music', mode: 'idle', slash: true, dim: true, badge: 'OFF AIR', badgeColor: '#4A4470' }],
+		['Mic off stream', { glyph: 'mic', label: 'Mic', mode: 'live', slash: true, badge: 'OFF AIR', badgeColor: C.red }],
+		['Headset game', { glyph: 'gamepad', label: 'Game', mode: 'idle' }],
+		['Headset muted', { glyph: 'chat', label: 'Discord', mode: 'live', slash: true, badge: 'MUTED' }],
+		['Deafen', { glyph: 'headset', label: 'Deafen all', mode: 'idle' }],
+		['Talk: everyone', { glyph: 'people', label: 'Everyone', mode: 'active', badge: 'NOW', badgeColor: C.magenta }],
+		['Talk: Kick only', { glyph: 'broadcast', label: 'Kick only', mode: 'idle' }],
+		['Talk: Discord only', { glyph: 'chat', label: 'Discord only', mode: 'idle' }],
+		['Party mode', { glyph: 'party', label: 'Party mode', mode: 'idle' }],
+		['Audio page', { glyph: 'mixer', label: 'Audio', mode: 'active' }],
+		['Back to main', { glyph: 'back', label: 'Main', mode: 'idle' }],
+		['No Sonar', { glyph: 'music', label: 'Music', mode: 'off', dim: true, badge: 'NO SONAR', badgeColor: C.red }]
 	];
 	const cells = states.map(([t, o]) => `<figure>${icons.key(o)}<figcaption>${t}</figcaption></figure>`).join('');
 	const out = join(here, '..', 'preview.html');

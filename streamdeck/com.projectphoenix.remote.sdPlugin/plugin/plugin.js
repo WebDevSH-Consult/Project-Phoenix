@@ -4,12 +4,29 @@
  * Bridges Stream Deck keys to Streamlabs Desktop on another PC. Every key's
  * image is redrawn from the shared Streamlabs state whenever it changes.
  */
-/* global StreamlabsClient, PhoenixIcons */
+/* global StreamlabsClient, SonarClient, PhoenixIcons */
 'use strict';
 
 const PREFIX = 'com.projectphoenix.remote.';
 const HOLD_MS = 800;
 const DEFAULT_HOST = '192.168.1.119';
+
+// Keys driven by SteelSeries Sonar on this PC rather than Streamlabs.
+const SONAR_ACTIONS = new Set(['viewers', 'headset', 'talk']);
+const CHANNELS = {
+	game: { label: 'Game', glyph: 'gamepad' },
+	aux: { label: 'Game chat', glyph: 'gamechat' },
+	chatRender: { label: 'Discord', glyph: 'chat' },
+	media: { label: 'Music', glyph: 'music' },
+	chatCapture: { label: 'Mic', glyph: 'mic' },
+	master: { label: 'Deafen all', glyph: 'headset' }
+};
+const TALK = {
+	everyone: { label: 'Everyone', glyph: 'people' },
+	kick: { label: 'Kick only', glyph: 'broadcast' },
+	discord: { label: 'Discord only', glyph: 'chat' },
+	party: { label: 'Party mode', glyph: 'party' }
+};
 
 let sd = null;
 let pluginUUID = '';
@@ -21,16 +38,24 @@ client.onChange(() => {
 	pushToInspectors();
 });
 
-// Entry point called by the Stream Deck app.
-// eslint-disable-next-line no-unused-vars
+const sonar = new SonarClient(log);
+sonar.onChange(() => {
+	renderAll();
+	pushToInspectors();
+});
+
+// Entry point, called from main.js with Stream Deck's launch arguments.
 function connectElgatoStreamDeckSocket(inPort, inPluginUUID, inRegisterEvent) {
 	pluginUUID = inPluginUUID;
 	sd = new WebSocket('ws://127.0.0.1:' + inPort);
 	sd.onopen = () => {
 		send({ event: inRegisterEvent, uuid: inPluginUUID });
 		send({ event: 'getGlobalSettings', context: inPluginUUID });
+		sonar.start();
 	};
 	sd.onmessage = (e) => onDeckEvent(JSON.parse(e.data));
+	// Stream Deck closed or restarted the plugin: exit so it can start a fresh copy.
+	sd.onclose = () => process.exit(0);
 }
 
 function send(obj) {
@@ -104,7 +129,8 @@ function onKeyDown(context) {
 		client.reconnect();
 		return;
 	}
-	if (client.state.conn !== 'connected') {
+	const conn = SONAR_ACTIONS.has(k.action) ? sonar.state.conn : client.state.conn;
+	if (conn !== 'connected') {
 		send({ event: 'showAlert', context });
 		return;
 	}
@@ -163,10 +189,19 @@ async function run(context, k) {
 			case 'mute':
 				await client.toggleMute(s.sourceName);
 				break;
+			case 'viewers':
+				await sonar.toggleStream(s.channel || 'game');
+				break;
+			case 'headset':
+				await sonar.toggleHeadset(s.channel || 'game');
+				break;
+			case 'talk':
+				await sonar.setTalkMode(s.mode || 'everyone');
+				break;
 			default:
 				return;
 		}
-		log(`${k.action} ok ${s.sceneName || s.sourceName || ''}`.trim());
+		log(`${k.action} ok ${s.sceneName || s.sourceName || s.channel || s.mode || ''}`.trim());
 		send({ event: 'showOk', context });
 	} catch (e) {
 		log(`${k.action} failed: ${e.message}`);
@@ -188,6 +223,7 @@ function render(context) {
 }
 
 function look(k) {
+	if (SONAR_ACTIONS.has(k.action)) return lookSonar(k);
 	const st = client.state;
 	const s = k.settings;
 	const linked = st.conn === 'connected';
@@ -267,6 +303,48 @@ function look(k) {
 	return out;
 }
 
+function lookSonar(k) {
+	const C = PhoenixIcons.COLORS;
+	const s = k.settings;
+	let out;
+	if (k.action === 'talk') {
+		const t = TALK[s.mode] || TALK.everyone;
+		const now = sonar.talkMode() === (s.mode || 'everyone');
+		out = { glyph: t.glyph, label: s.label || t.label, mode: now ? 'active' : 'idle' };
+		if (now) Object.assign(out, { badge: 'NOW', badgeColor: C.magenta });
+	} else {
+		const ch = s.channel || 'game';
+		const c = CHANNELS[ch] || CHANNELS.game;
+		const label = s.label || c.label;
+		if (k.action === 'viewers') {
+			const isMic = ch === 'chatCapture';
+			out = sonar.onStream(ch)
+				? { glyph: c.glyph, label, mode: 'active', badge: 'ON AIR', badgeColor: C.magenta }
+				: { glyph: c.glyph, label, mode: isMic ? 'live' : 'idle', slash: true, dim: !isMic,
+					badge: 'OFF AIR', badgeColor: isMic ? C.red : '#4A4470' };
+		} else if (ch === 'master') {
+			out = sonar.inHeadset(ch)
+				? { glyph: 'headset', label, mode: 'idle' }
+				: { glyph: 'headset', label: 'Deafened', mode: 'live', slash: true, badge: 'DEAFENED' };
+		} else {
+			out = sonar.inHeadset(ch)
+				? { glyph: c.glyph, label, mode: 'idle' }
+				: { glyph: c.glyph, label, mode: 'live', slash: true, badge: 'MUTED' };
+		}
+	}
+
+	switch (sonar.state.conn) {
+		case 'connected':
+			break;
+		case 'classic':
+			Object.assign(out, { mode: 'warn', dim: true, badge: 'CLASSIC', badgeColor: C.amber });
+			break;
+		default:
+			Object.assign(out, { mode: 'off', dim: true, badge: 'NO SONAR', badgeColor: C.red });
+	}
+	return out;
+}
+
 // ---- Property inspector -----------------------------------------------------
 
 function inspectorPayload() {
@@ -275,7 +353,9 @@ function inspectorPayload() {
 		conn: st.conn,
 		error: st.error,
 		scenes: st.scenes.map((x) => x.name),
-		audio: st.audio.map((x) => x.name)
+		audio: st.audio.map((x) => x.name),
+		sonar: sonar.state.conn,
+		sonarError: sonar.state.error
 	};
 }
 
@@ -286,3 +366,5 @@ function pushToInspector(context, action) {
 function pushToInspectors() {
 	for (const [context, k] of keys) pushToInspector(context, PREFIX + k.action);
 }
+
+module.exports = { connectElgatoStreamDeckSocket, log };

@@ -31,8 +31,9 @@ $pluginsDir = Join-Path $deckRoot 'Plugins'
 $target     = Join-Path $pluginsDir "$pluginId.sdPlugin"
 # Fixed profile id so re-running the installer updates the same profile.
 $profileId  = '7E0A5C1D-9B4F-4C1E-8F00-50E1A2C3D4F5'
-$pageId     = 'A1B2C3D4-0001-4F00-9A00-50E1A2C3D4F5'
 $defaultId  = 'A1B2C3D4-0000-4F00-9A00-50E1A2C3D4F5'
+# Page n (1-based) gets id A1B2C3D4-000n-...
+function Get-PageId([int]$n) { 'A1B2C3D4-{0:D4}-4F00-9A00-50E1A2C3D4F5' -f $n }
 
 function Write-JsonNoBom([string]$Path, $Object) {
     $json = $Object | ConvertTo-Json -Depth 12 -Compress
@@ -64,42 +65,73 @@ if (-not $SkipProfile) {
 
     $layout  = Get-Content $layoutFile -Raw | ConvertFrom-Json
     $version = (Get-Content (Join-Path $source 'manifest.json') -Raw | ConvertFrom-Json).Version
-    $actions = [ordered]@{}
-    foreach ($key in $layout.keys) {
-        $actions[$key.position] = [ordered]@{
-            ActionID    = [guid]::NewGuid().ToString()
-            LinkedTitle = $true
-            Name        = $key.name
-            Plugin      = [ordered]@{ Name = 'Phoenix Remote'; UUID = $pluginId; Version = $version }
-            Resources   = $null
-            Settings    = $key.settings
-            State       = 0
-            States      = @(@{})
-            UUID        = "$pluginId.$($key.action)"
-        }
-    }
 
     $profileDir = Join-Path $profilesDir "$profileId.sdProfile"
     if (Test-Path $profileDir) { Remove-Item $profileDir -Recurse -Force }
-    $pageDir    = Join-Path $profileDir "Profiles\$pageId"
     $defaultDir = Join-Path $profileDir "Profiles\$defaultId"
-    New-Item -ItemType Directory -Force $pageDir, $defaultDir | Out-Null
+    New-Item -ItemType Directory -Force $defaultDir | Out-Null
+
+    $pageIds = @()
+    $n = 0
+    foreach ($page in $layout.pages) {
+        $n++
+        $pageId  = Get-PageId $n
+        $pageIds += $pageId.ToLower()
+        $pageDir = Join-Path $profileDir "Profiles\$pageId"
+        New-Item -ItemType Directory -Force (Join-Path $pageDir 'Images') | Out-Null
+
+        $actions = [ordered]@{}
+        foreach ($key in $page.keys) {
+            if ($key.action -like 'page.*') {
+                # Stream Deck's built-in page key, with Phoenix artwork.
+                $states = @(@{})
+                if ($key.image) {
+                    $img = "$($key.image).png"
+                    Copy-Item (Join-Path $source "images\keys\$($key.image)@2x.png") (Join-Path $pageDir "Images\$img")
+                    $states = @(@{ Image = "Images/$img" })
+                }
+                $actions[$key.position] = [ordered]@{
+                    ActionID    = [guid]::NewGuid().ToString()
+                    LinkedTitle = $true
+                    Name        = $key.name
+                    Plugin      = [ordered]@{ Name = 'Pages'; UUID = 'com.elgato.streamdeck.page'; Version = '1.0' }
+                    Resources   = $null
+                    Settings    = @{}
+                    State       = 0
+                    States      = $states
+                    UUID        = "com.elgato.streamdeck.$($key.action)"
+                }
+                continue
+            }
+            $actions[$key.position] = [ordered]@{
+                ActionID    = [guid]::NewGuid().ToString()
+                LinkedTitle = $true
+                Name        = $key.name
+                Plugin      = [ordered]@{ Name = 'Phoenix Remote'; UUID = $pluginId; Version = $version }
+                Resources   = $null
+                Settings    = $key.settings
+                State       = 0
+                States      = @(@{})
+                UUID        = "$pluginId.$($key.action)"
+            }
+        }
+        Write-JsonNoBom (Join-Path $pageDir 'manifest.json') ([ordered]@{
+            Controllers = @([ordered]@{ Actions = $actions; Type = 'Keypad' })
+            Icon = ''; Name = $page.name
+        })
+    }
 
     Write-JsonNoBom (Join-Path $profileDir 'manifest.json') ([ordered]@{
         Device  = [ordered]@{ Model = $device.Model; UUID = $device.UUID }
         Name    = $layout.name
-        Pages   = [ordered]@{ Current = $pageId.ToLower(); Default = $defaultId.ToLower(); Pages = @($pageId.ToLower()) }
+        Pages   = [ordered]@{ Current = $pageIds[0]; Default = $defaultId.ToLower(); Pages = $pageIds }
         Version = '3.0'
-    })
-    Write-JsonNoBom (Join-Path $pageDir 'manifest.json') ([ordered]@{
-        Controllers = @([ordered]@{ Actions = $actions; Type = 'Keypad' })
-        Icon = ''; Name = ''
     })
     Write-JsonNoBom (Join-Path $defaultDir 'manifest.json') ([ordered]@{
         Controllers = @([ordered]@{ Actions = $null; Type = 'Keypad' })
         Icon = ''; Name = ''
     })
-    Write-Host "Profile '$($layout.name)' written: $profileDir"
+    Write-Host "Profile '$($layout.name)' written with $n page(s): $profileDir"
 }
 
 # --- Start Stream Deck -------------------------------------------------------

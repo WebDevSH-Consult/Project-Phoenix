@@ -94,10 +94,23 @@ const STATUS_TEXT = {
 	disconnected: 'Can’t reach the Streaming PC'
 };
 
+const SONAR_ACTIONS = ['viewers', 'headset', 'talk'];
+const SONAR_TEXT = {
+	connected: 'Connected to SteelSeries Sonar',
+	searching: 'Looking for SteelSeries Sonar…',
+	classic: 'Sonar is in Classic mode — switch it to Streamer mode',
+	offline: 'Can’t reach SteelSeries Sonar — is GG running?'
+};
+
 function showStatus() {
-	$('status').textContent = STATUS_TEXT[lists.conn] || lists.conn;
-	$('status').className = 'status ' + lists.conn;
-	$('status-dot').className = 'dot ' + lists.conn;
+	const isSonar = SONAR_ACTIONS.includes(action);
+	// Sonar keys don't use the Streamlabs connection, so hide that section for them.
+	$('connection').hidden = isSonar;
+	const conn = isSonar ? (lists.sonar || 'searching') : lists.conn;
+	const text = isSonar ? SONAR_TEXT : STATUS_TEXT;
+	$('status').textContent = text[conn] || conn;
+	$('status').className = 'status ' + (conn === 'searching' || conn === 'classic' ? 'connecting' : conn === 'offline' ? 'disconnected' : conn);
+	$('status-dot').className = 'dot ' + conn;
 }
 
 // ---- Per-action fields ------------------------------------------------------
@@ -112,6 +125,19 @@ function buildAction() {
 		box.appendChild(picker('Audio source', 'sourceName', lists.audio));
 		box.appendChild(textField('Key label', 'label', 'e.g. MIC'));
 		box.appendChild(select('Icon', 'kind', [['mic', 'Microphone'], ['speaker', 'Speaker']], settings.kind || 'mic'));
+	} else if (action === 'viewers' || action === 'headset') {
+		const channels = [['game', 'Game'], ['aux', 'Game chat (Sonar Aux)'], ['chatRender', 'Discord (Sonar Chat)'], ['media', 'Music (Sonar Media)']];
+		if (action === 'viewers') channels.push(['chatCapture', 'Mic']);
+		else channels.push(['master', 'Everything (deafen)']);
+		box.appendChild(select('Sonar channel', 'channel', channels, settings.channel || ''));
+		box.appendChild(textField('Key label', 'label', 'Defaults to the channel name'));
+	} else if (action === 'talk') {
+		box.appendChild(select('Mic talks to', 'mode', [
+			['everyone', 'Everyone (Kick + Discord)'],
+			['kick', 'Kick only (Discord can’t hear you)'],
+			['discord', 'Discord only (viewers can’t hear you)'],
+			['party', 'Party mode (everyone + viewers hear Discord & game chat)']
+		], settings.mode || ''));
 	} else if (action === 'stream') {
 		const row = document.createElement('div');
 		row.className = 'row';

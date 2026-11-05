@@ -64,6 +64,33 @@
 		speakerOff:
 			'<path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z" fill="currentColor" stroke-linejoin="round"/>' +
 			'<path d="M15.5 9.5l5 5M20.5 9.5l-5 5"/>',
+		gamepad:
+			'<path d="M7.5 7.5h9a4.5 4.5 0 0 1 4.5 4.5v1.8a2.9 2.9 0 0 1-5.2 1.8L14.6 14H9.4l-1.2 1.6A2.9 2.9 0 0 1 3 13.8V12a4.5 4.5 0 0 1 4.5-4.5z" stroke-linejoin="round"/>' +
+			'<path d="M8 9.8v3.4M6.3 11.5h3.4"/><circle cx="15.6" cy="10.6" r="1" fill="currentColor" stroke="none"/>' +
+			'<circle cx="17.6" cy="12.6" r="1" fill="currentColor" stroke="none"/>',
+		gamechat:
+			'<path d="M3.5 4.5h17v11H10l-4.5 4v-4h-2z" stroke-linejoin="round"/>' +
+			'<path d="M8.5 8.2v3.6M6.7 10h3.6"/><circle cx="14.5" cy="9" r="1" fill="currentColor" stroke="none"/>' +
+			'<circle cx="16.8" cy="11.2" r="1" fill="currentColor" stroke="none"/>',
+		chat:
+			'<path d="M3.5 4.5h12v8.5H8.5l-3.5 3v-3H3.5z" stroke-linejoin="round"/>' +
+			'<path d="M18.5 8.5h2v8.5H19v3l-3.5-3H10v-1.5" stroke-linejoin="round"/>',
+		music:
+			'<path d="M9 18V5.5l11-2.5v12.5"/><circle cx="6.5" cy="18" r="2.5"/><circle cx="17.5" cy="15.5" r="2.5"/>',
+		headset:
+			'<path d="M4 15v-3a8 8 0 0 1 16 0v3"/><rect x="3" y="13.5" width="4.2" height="6.5" rx="1.6"/>' +
+			'<rect x="16.8" y="13.5" width="4.2" height="6.5" rx="1.6"/>',
+		people:
+			'<circle cx="9" cy="8" r="3.2"/><path d="M3 20a6 6 0 0 1 12 0"/>' +
+			'<circle cx="17" cy="9" r="2.5"/><path d="M15.8 14.3A4.8 4.8 0 0 1 21.5 19"/>',
+		party:
+			'<circle cx="12" cy="9" r="3.2"/><path d="M6 20a6 6 0 0 1 12 0"/>' +
+			'<path d="M3.5 4.5l1.6 1.6M20.5 4.5l-1.6 1.6M2.5 10h2M21.5 10h-2"/>',
+		mixer:
+			'<path d="M6 4v16M12 4v16M18 4v16"/><rect x="4" y="12" width="4" height="3" rx="1" fill="currentColor"/>' +
+			'<rect x="10" y="6.5" width="4" height="3" rx="1" fill="currentColor"/><rect x="16" y="14.5" width="4" height="3" rx="1" fill="currentColor"/>',
+		back:
+			'<path d="M10 5.5L3.5 12l6.5 6.5"/><path d="M4 12h9.5a6.5 6.5 0 0 1 6.5 6.5"/>',
 		// Aurora-style yak/phoenix emblem with the cyan diamond.
 		emblem:
 			'<path d="M3.5 3.5C5 9 8 12.5 12 14c4-1.5 7-5 8.5-10.5C17.5 6 15 7.5 12 7.5S6.5 6 3.5 3.5z" fill="#7C3AED" stroke="none"/>' +
@@ -94,7 +121,8 @@
 
 	/**
 	 * Build a 144x144 key SVG.
-	 * opts: { glyph, label, mode, badge, badgeColor, dim }
+	 * opts: { glyph, label, mode, badge, badgeColor, dim, slash }
+	 * slash draws a strike through the glyph (muted / off air).
 	 */
 	function key(opts) {
 		const m = MODES[opts.mode] || MODES.idle;
@@ -133,7 +161,7 @@
 ${stars}
 <rect x="3" y="3" width="138" height="138" rx="21" fill="none" stroke="url(#edge${uid})" stroke-width="3.5" opacity="${0.55 + 0.45 * m.glow}" ${m.glow ? `filter="url(#glow${uid})"` : ''}/>
 <g opacity="${opacity}">
-<g transform="translate(${72 - 30} ${glyphY}) scale(2.5)" color="${m.glyph}" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" ${m.glow ? `filter="url(#glow${uid})"` : ''}>${GLYPHS[opts.glyph] || ''}</g>
+<g transform="translate(${72 - 30} ${glyphY}) scale(2.5)" color="${m.glyph}" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" ${m.glow ? `filter="url(#glow${uid})"` : ''}>${GLYPHS[opts.glyph] || ''}${opts.slash ? '<path d="M3.5 3.5l17 17" stroke-width="2.4"/>' : ''}</g>
 ${label}
 </g>
 ${badge}

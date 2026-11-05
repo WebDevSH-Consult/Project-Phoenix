@@ -86,3 +86,5 @@ button:hover { background: #8b5cf6; }
 .dot.connected { background: #34f5a4; }
 .dot.connecting, .dot.auth-failed, .dot.unconfigured { background: #ffb020; }
 .dot.disconnected { background: #ff3b5c; }
+
+[hidden] { display: none !important; }

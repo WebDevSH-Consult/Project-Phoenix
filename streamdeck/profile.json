@@ -1,20 +1,48 @@
 {
 	"name": "Phoenix Remote",
-	"comment": "15-key layout (col,row). Scene and audio names must match Streamlabs exactly (collection: Purple Starburst).",
-	"keys": [
-		{ "position": "0,0", "action": "stream", "name": "Go Live / End Stream", "settings": { "requireHold": true } },
-		{ "position": "1,0", "action": "record", "name": "Record", "settings": {} },
-		{ "position": "2,0", "action": "replaybuffer", "name": "Replay Buffer On / Off", "settings": {} },
-		{ "position": "3,0", "action": "replaysave", "name": "Save Replay Clip", "settings": {} },
-		{ "position": "4,0", "action": "status", "name": "Connection Status", "settings": {} },
+	"comment": "15-key layout per page (col,row). Scene and audio names must match Streamlabs exactly (collection: Purple Starburst). 'page.next' / 'page.previous' are Stream Deck's built-in page keys; 'image' is a PNG under the plugin's images/keys folder.",
+	"pages": [
+		{
+			"name": "Main",
+			"keys": [
+				{ "position": "0,0", "action": "stream", "name": "Go Live / End Stream", "settings": { "requireHold": true } },
+				{ "position": "1,0", "action": "record", "name": "Record", "settings": {} },
+				{ "position": "2,0", "action": "replaybuffer", "name": "Replay Buffer On / Off", "settings": {} },
+				{ "position": "3,0", "action": "replaysave", "name": "Save Replay Clip", "settings": {} },
+				{ "position": "4,0", "action": "status", "name": "Connection Status", "settings": {} },
 
-		{ "position": "0,1", "action": "scene", "name": "Switch Scene", "settings": { "sceneName": "Live Scene" } },
-		{ "position": "1,1", "action": "scene", "name": "Switch Scene", "settings": { "sceneName": "Starting Soon" } },
-		{ "position": "2,1", "action": "scene", "name": "Switch Scene", "settings": { "sceneName": "Be Right Back" } },
-		{ "position": "3,1", "action": "scene", "name": "Switch Scene", "settings": { "sceneName": "Ending Soon" } },
-		{ "position": "4,1", "action": "scene", "name": "Switch Scene", "settings": { "sceneName": "Intermission" } },
+				{ "position": "0,1", "action": "scene", "name": "Switch Scene", "settings": { "sceneName": "Live Scene" } },
+				{ "position": "1,1", "action": "scene", "name": "Switch Scene", "settings": { "sceneName": "Starting Soon" } },
+				{ "position": "2,1", "action": "scene", "name": "Switch Scene", "settings": { "sceneName": "Be Right Back" } },
+				{ "position": "3,1", "action": "scene", "name": "Switch Scene", "settings": { "sceneName": "Ending Soon" } },
+				{ "position": "4,1", "action": "scene", "name": "Switch Scene", "settings": { "sceneName": "Intermission" } },
 
-		{ "position": "0,2", "action": "mute", "name": "Mute Audio Source", "settings": { "sourceName": "Audio Input Capture", "label": "Mic", "kind": "mic" } },
-		{ "position": "1,2", "action": "mute", "name": "Mute Audio Source", "settings": { "sourceName": "Video Capture Device", "label": "Cam audio", "kind": "speaker" } }
+				{ "position": "0,2", "action": "mute", "name": "Mute Audio Source", "settings": { "sourceName": "Audio Input Capture", "label": "Mic", "kind": "mic" } },
+				{ "position": "1,2", "action": "mute", "name": "Mute Audio Source", "settings": { "sourceName": "Video Capture Device", "label": "Cam audio", "kind": "speaker" } },
+				{ "position": "4,2", "action": "page.next", "name": "Audio", "image": "page-audio" }
+			]
+		},
+		{
+			"name": "Audio",
+			"keys": [
+				{ "position": "0,0", "action": "viewers", "name": "Viewers Hear", "settings": { "channel": "game" } },
+				{ "position": "1,0", "action": "viewers", "name": "Viewers Hear", "settings": { "channel": "aux" } },
+				{ "position": "2,0", "action": "viewers", "name": "Viewers Hear", "settings": { "channel": "chatRender" } },
+				{ "position": "3,0", "action": "viewers", "name": "Viewers Hear", "settings": { "channel": "media" } },
+				{ "position": "4,0", "action": "viewers", "name": "Viewers Hear", "settings": { "channel": "chatCapture" } },
+
+				{ "position": "0,1", "action": "headset", "name": "Headset Mute", "settings": { "channel": "game" } },
+				{ "position": "1,1", "action": "headset", "name": "Headset Mute", "settings": { "channel": "aux" } },
+				{ "position": "2,1", "action": "headset", "name": "Headset Mute", "settings": { "channel": "chatRender" } },
+				{ "position": "3,1", "action": "headset", "name": "Headset Mute", "settings": { "channel": "media" } },
+				{ "position": "4,1", "action": "headset", "name": "Headset Mute", "settings": { "channel": "master" } },
+
+				{ "position": "0,2", "action": "page.previous", "name": "Main", "image": "page-main" },
+				{ "position": "1,2", "action": "talk", "name": "Mic Talks To", "settings": { "mode": "everyone" } },
+				{ "position": "2,2", "action": "talk", "name": "Mic Talks To", "settings": { "mode": "kick" } },
+				{ "position": "3,2", "action": "talk", "name": "Mic Talks To", "settings": { "mode": "discord" } },
+				{ "position": "4,2", "action": "talk", "name": "Mic Talks To", "settings": { "mode": "party" } }
+			]
+		}
 	]
 }

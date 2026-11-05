@@ -1,17 +1,18 @@
 {
 	"Name": "Phoenix Remote",
-	"Version": "1.0.0.0",
+	"Version": "1.1.0.0",
 	"Author": "WebDevSH",
-	"Description": "Control Streamlabs Desktop on a separate streaming PC over the local network: go live, record, replay clips, switch scenes and mute sources.",
+	"Description": "Control Streamlabs Desktop on a separate streaming PC over the local network (go live, record, replay clips, scenes, mutes) and SteelSeries Sonar on this PC (what viewers hear, what you hear, who your mic talks to).",
 	"URL": "https://github.com/WebDevSH-Consult/Project-Phoenix",
 	"SDKVersion": 2,
-	"CodePath": "plugin/index.html",
+	"CodePath": "plugin/main.js",
+	"Nodejs": { "Version": "20", "Debug": "disabled" },
 	"PropertyInspectorPath": "pi/index.html",
 	"Icon": "images/plugin",
 	"Category": "Phoenix Remote",
 	"CategoryIcon": "images/category",
 	"OS": [{ "Platform": "windows", "MinimumVersion": "10" }],
-	"Software": { "MinimumVersion": "6.0" },
+	"Software": { "MinimumVersion": "6.5" },
 	"Actions": [
 		{
 			"UUID": "com.projectphoenix.remote.stream",
@@ -82,6 +83,36 @@
 			"Controllers": ["Keypad"],
 			"DisableAutomaticStates": true,
 			"SupportedInMultiActions": false
+		},
+		{
+			"UUID": "com.projectphoenix.remote.viewers",
+			"Name": "Viewers Hear (Sonar)",
+			"Tooltip": "Put a Sonar channel on or off the stream mix that Kick viewers hear",
+			"Icon": "images/actions/viewers",
+			"States": [{ "Image": "images/keys/viewers", "ShowTitle": false }],
+			"Controllers": ["Keypad"],
+			"DisableAutomaticStates": true,
+			"SupportedInMultiActions": true
+		},
+		{
+			"UUID": "com.projectphoenix.remote.headset",
+			"Name": "Headset Mute (Sonar)",
+			"Tooltip": "Mute or unmute a Sonar channel in your headset, or deafen everything",
+			"Icon": "images/actions/headset",
+			"States": [{ "Image": "images/keys/headset", "ShowTitle": false }],
+			"Controllers": ["Keypad"],
+			"DisableAutomaticStates": true,
+			"SupportedInMultiActions": true
+		},
+		{
+			"UUID": "com.projectphoenix.remote.talk",
+			"Name": "Mic Talks To (Sonar)",
+			"Tooltip": "Choose who hears your mic: everyone, Kick only, Discord only, or party mode",
+			"Icon": "images/actions/talk",
+			"States": [{ "Image": "images/keys/talk", "ShowTitle": false }],
+			"Controllers": ["Keypad"],
+			"DisableAutomaticStates": true,
+			"SupportedInMultiActions": true
 		}
 	]
 }
