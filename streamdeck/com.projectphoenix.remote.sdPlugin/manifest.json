@@ -1,0 +1,87 @@
+{
+	"Name": "Phoenix Remote",
+	"Version": "1.0.0.0",
+	"Author": "WebDevSH",
+	"Description": "Control Streamlabs Desktop on a separate streaming PC over the local network: go live, record, replay clips, switch scenes and mute sources.",
+	"URL": "https://github.com/WebDevSH-Consult/Project-Phoenix",
+	"SDKVersion": 2,
+	"CodePath": "plugin/index.html",
+	"PropertyInspectorPath": "pi/index.html",
+	"Icon": "images/plugin",
+	"Category": "Phoenix Remote",
+	"CategoryIcon": "images/category",
+	"OS": [{ "Platform": "windows", "MinimumVersion": "10" }],
+	"Software": { "MinimumVersion": "6.0" },
+	"Actions": [
+		{
+			"UUID": "com.projectphoenix.remote.stream",
+			"Name": "Go Live / End Stream",
+			"Tooltip": "Start or stop streaming in Streamlabs (press and hold)",
+			"Icon": "images/actions/stream",
+			"States": [{ "Image": "images/keys/stream", "ShowTitle": false }],
+			"Controllers": ["Keypad"],
+			"DisableAutomaticStates": true,
+			"SupportedInMultiActions": false
+		},
+		{
+			"UUID": "com.projectphoenix.remote.record",
+			"Name": "Record",
+			"Tooltip": "Start or stop recording in Streamlabs",
+			"Icon": "images/actions/record",
+			"States": [{ "Image": "images/keys/record", "ShowTitle": false }],
+			"Controllers": ["Keypad"],
+			"DisableAutomaticStates": true,
+			"SupportedInMultiActions": true
+		},
+		{
+			"UUID": "com.projectphoenix.remote.replaybuffer",
+			"Name": "Replay Buffer On / Off",
+			"Tooltip": "Start or stop the Streamlabs replay buffer",
+			"Icon": "images/actions/replaybuffer",
+			"States": [{ "Image": "images/keys/replaybuffer", "ShowTitle": false }],
+			"Controllers": ["Keypad"],
+			"DisableAutomaticStates": true,
+			"SupportedInMultiActions": true
+		},
+		{
+			"UUID": "com.projectphoenix.remote.replaysave",
+			"Name": "Save Replay Clip",
+			"Tooltip": "Save the last seconds of the replay buffer",
+			"Icon": "images/actions/replaysave",
+			"States": [{ "Image": "images/keys/replaysave", "ShowTitle": false }],
+			"Controllers": ["Keypad"],
+			"DisableAutomaticStates": true,
+			"SupportedInMultiActions": true
+		},
+		{
+			"UUID": "com.projectphoenix.remote.scene",
+			"Name": "Switch Scene",
+			"Tooltip": "Switch Streamlabs to a scene; lights up when it is on air",
+			"Icon": "images/actions/scene",
+			"States": [{ "Image": "images/keys/scene", "ShowTitle": false }],
+			"Controllers": ["Keypad"],
+			"DisableAutomaticStates": true,
+			"SupportedInMultiActions": true
+		},
+		{
+			"UUID": "com.projectphoenix.remote.mute",
+			"Name": "Mute Audio Source",
+			"Tooltip": "Mute or unmute a Streamlabs audio source",
+			"Icon": "images/actions/mute",
+			"States": [{ "Image": "images/keys/mute", "ShowTitle": false }],
+			"Controllers": ["Keypad"],
+			"DisableAutomaticStates": true,
+			"SupportedInMultiActions": true
+		},
+		{
+			"UUID": "com.projectphoenix.remote.status",
+			"Name": "Connection Status",
+			"Tooltip": "Shows the link to Streamlabs; press to reconnect",
+			"Icon": "images/actions/status",
+			"States": [{ "Image": "images/keys/status", "ShowTitle": false }],
+			"Controllers": ["Keypad"],
+			"DisableAutomaticStates": true,
+			"SupportedInMultiActions": false
+		}
+	]
+}

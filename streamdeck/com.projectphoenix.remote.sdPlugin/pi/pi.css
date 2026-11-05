@@ -1,0 +1,88 @@
+/* Phoenix Remote property inspector — matches Stream Deck's dark panel. */
+body {
+	margin: 0;
+	padding: 6px 12px 12px 0;
+	background: #2d2d2d;
+	color: #d8d8d8;
+	font: 9pt "Segoe UI", Arial, sans-serif;
+}
+
+.section { margin: 0 0 8px; }
+
+summary {
+	cursor: pointer;
+	padding: 6px 0 6px 12px;
+	color: #e6e6e6;
+	font-weight: 600;
+}
+
+.row {
+	display: flex;
+	align-items: center;
+	min-height: 30px;
+	margin: 2px 0;
+}
+
+.row > label:first-child {
+	flex: 0 0 96px;
+	padding-right: 10px;
+	text-align: right;
+	color: #9a9a9a;
+}
+
+input[type="text"], input[type="number"], input[type="password"], select {
+	flex: 1;
+	min-width: 0;
+	height: 24px;
+	padding: 0 6px;
+	border: none;
+	border-radius: 3px;
+	background: #3d3d3d;
+	color: #d8d8d8;
+	font: inherit;
+}
+
+button {
+	height: 26px;
+	padding: 0 14px;
+	border: none;
+	border-radius: 3px;
+	background: #7c3aed;
+	color: #fff;
+	font: inherit;
+	cursor: pointer;
+}
+
+button:hover { background: #8b5cf6; }
+
+.check { display: flex; align-items: center; gap: 6px; }
+
+.hint {
+	margin: 4px 0 0 106px;
+	color: #8a8a8a;
+	font-size: 8pt;
+}
+
+.status {
+	margin: 4px 0 0 106px;
+	font-weight: 600;
+}
+
+.status.connected { color: #34f5a4; }
+.status.connecting { color: #ffb020; }
+.status.auth-failed, .status.unconfigured { color: #ffb020; }
+.status.disconnected { color: #ff3b5c; }
+
+.dot {
+	display: inline-block;
+	width: 8px;
+	height: 8px;
+	margin-left: 6px;
+	border-radius: 50%;
+	background: #666;
+	vertical-align: middle;
+}
+
+.dot.connected { background: #34f5a4; }
+.dot.connecting, .dot.auth-failed, .dot.unconfigured { background: #ffb020; }
+.dot.disconnected { background: #ff3b5c; }
