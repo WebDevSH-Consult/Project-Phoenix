@@ -212,10 +212,19 @@ function New-PhoenixDeploymentPlanContract {
     return $result
 }
 
+function Test-PhoenixConsoleInputRedirected {
+    [CmdletBinding()]
+    [OutputType([bool])]
+    param()
+    return [bool][Console]::IsInputRedirected
+}
+
 function Test-PhoenixInteractiveSession {
     [CmdletBinding()]
     [OutputType([bool])]
     param()
+    # Piped or redirected stdin (e.g. "APPROVE" | pwsh -File ...) is not a human at a console.
+    if (Test-PhoenixConsoleInputRedirected) { return $false }
     return [bool]([Environment]::UserInteractive -and $Host.Name -eq 'ConsoleHost')
 }
 

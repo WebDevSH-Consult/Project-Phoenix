@@ -172,6 +172,15 @@ Describe 'Phoenix approval record' {
         { New-PhoenixApprovalRecord -Plan $plan -ApprovalPath (Join-Path $TestDrive 'plan.approval.json') } | Should -Throw '*interactive Windows ConsoleHost*'
         Test-Path (Join-Path $TestDrive 'plan.approval.json') | Should -BeFalse
     }
+    It 'treats redirected console input as non-interactive and refuses approval' {
+        $plan = New-TestPlan
+        Mock -ModuleName PlanContracts Test-PhoenixConsoleInputRedirected { $true }
+        Mock -ModuleName PlanContracts Read-PhoenixApprovalConfirmation { 'APPROVE' }
+        InModuleScope PlanContracts { Test-PhoenixInteractiveSession } | Should -BeFalse
+        { New-PhoenixApprovalRecord -Plan $plan -ApprovalPath (Join-Path $TestDrive 'piped.approval.json') } | Should -Throw '*interactive Windows ConsoleHost*'
+        Should -Invoke -ModuleName PlanContracts Read-PhoenixApprovalConfirmation -Times 0 -Exactly
+        Test-Path (Join-Path $TestDrive 'piped.approval.json') | Should -BeFalse
+    }
     It 'requires exact uppercase APPROVE confirmation' {
         $plan = New-TestPlan
         Mock -ModuleName PlanContracts Test-PhoenixInteractiveSession { $true }
