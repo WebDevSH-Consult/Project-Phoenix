@@ -108,7 +108,7 @@ function Assert-PhoenixDeploymentPlanContract {
         foreach ($field in @('ActionId', 'Category', 'Name', 'ManifestIdentity', 'Action', 'Parameters', 'Reason', 'Risk', 'Order', 'Dependencies')) {
             if ($action.PSObject.Properties.Name -cnotcontains $field) { throw "Action is missing required field '$field'." }
         }
-        if ([string]$action.ActionId -notmatch '^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}
+        if ([string]$action.ActionId -notmatch '^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$') { throw 'ActionId must be a stable 1–128 character identifier.' }
         if ($action.Category -notin @('Application', 'Setting')) { throw "Unsupported action category '$($action.Category)'." }
         if ($action.Action -notin @('Install', 'Apply', 'Skip', 'Defer')) { throw "Unsupported action '$($action.Action)'." }
         if ($action.Action -eq 'Install' -and $action.Category -ne 'Application') { throw 'Install is only valid for Application actions.' }
