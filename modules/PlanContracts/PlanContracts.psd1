@@ -13,7 +13,10 @@
         'Test-PhoenixDeploymentPlanContract',
         'New-PhoenixApprovalRecord',
         'Assert-PhoenixApprovalRecord',
-        'Test-PhoenixApprovalRecord'
+        'Test-PhoenixApprovalRecord',
+        'ConvertFrom-PhoenixContractJson',
+        'Read-PhoenixDeploymentPlanContract',
+        'Read-PhoenixApprovalRecord'
     )
     CmdletsToExport   = @()
     VariablesToExport = @()
