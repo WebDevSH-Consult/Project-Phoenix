@@ -1,0 +1,160 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://project-phoenix.local/schemas/plan-v1.schema.json",
+  "title": "Project Phoenix Deployment Plan Contract v1.0",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "SchemaVersion",
+    "PlanId",
+    "CreatedAt",
+    "PhoenixVersion",
+    "SourceRevision",
+    "Machine",
+    "Scope",
+    "ConfigurationFingerprint",
+    "ManifestFingerprint",
+    "StateFingerprint",
+    "Actions",
+    "Summary",
+    "DigestAlgorithm",
+    "PlanDigest"
+  ],
+  "properties": {
+    "SchemaVersion": {
+      "const": "1.0"
+    },
+    "PlanId": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "CreatedAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "PhoenixVersion": {
+      "type": "string",
+      "minLength": 1
+    },
+    "SourceRevision": {
+      "type": "string"
+    },
+    "Machine": {
+      "type": "object",
+      "required": [
+        "MachineId",
+        "ComputerName"
+      ],
+      "properties": {
+        "MachineId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "ComputerName": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "additionalProperties": true
+    },
+    "Scope": {
+      "type": "string",
+      "minLength": 1
+    },
+    "ConfigurationFingerprint": {
+      "type": "string",
+      "pattern": "^[a-fA-F0-9]{64}$"
+    },
+    "ManifestFingerprint": {
+      "type": "string",
+      "pattern": "^[a-fA-F0-9]{64}$"
+    },
+    "StateFingerprint": {
+      "type": "string",
+      "pattern": "^[a-fA-F0-9]{64}$"
+    },
+    "Actions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "ActionId",
+          "Category",
+          "Name",
+          "ManifestIdentity",
+          "Action",
+          "Parameters",
+          "Reason",
+          "Risk",
+          "Order",
+          "Dependencies"
+        ],
+        "properties": {
+          "ActionId": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+          },
+          "Category": {
+            "enum": [
+              "Application",
+              "Setting"
+            ]
+          },
+          "Name": {
+            "type": "string",
+            "minLength": 1
+          },
+          "ManifestIdentity": {
+            "type": "string",
+            "minLength": 1
+          },
+          "Action": {
+            "enum": [
+              "Install",
+              "Apply",
+              "Skip",
+              "Defer"
+            ]
+          },
+          "Parameters": {
+            "type": "object"
+          },
+          "Reason": {
+            "type": "string",
+            "minLength": 1
+          },
+          "Risk": {
+            "enum": [
+              "Low",
+              "Medium",
+              "High",
+              "Critical"
+            ]
+          },
+          "Order": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "Dependencies": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "uniqueItems": true
+          }
+        }
+      }
+    },
+    "Summary": {
+      "type": "object"
+    },
+    "DigestAlgorithm": {
+      "const": "SHA256"
+    },
+    "PlanDigest": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    }
+  }
+}
