@@ -290,7 +290,7 @@ Read-only audit/reporting may be candidates. Repair and application upgrades are
 ## Delivery slices
 
 1. **PHX-005A — Plan/approval contracts:** schema, canonicalisation, digest, approval record, validation tests. **Delivered** in `modules/PlanContracts` (PR #51).
-2. **PHX-005B — Freshness gate:** machine/config/state comparison and stale-plan tests.
+2. **PHX-005B — Freshness gate:** machine/config/state comparison and stale-plan tests. Implemented in `modules/PlanFreshness` (plan provenance, contract plan builder, `Test-`/`Assert-PhoenixPlanFreshness`); pending review.
 3. **PHX-005C — Executor:** action dispatch through existing modules, deterministic ordering, fail-fast tests.
 4. **PHX-005D — Transaction recovery:** adapt confirmed action results to Recovery's shared path, verify reverse order and partial rollback.
 5. **PHX-005E — Bootstrap integration:** explicit approve/execute switches, compatibility tests, reports and documentation.

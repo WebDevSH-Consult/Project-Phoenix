@@ -31,7 +31,8 @@ Production hardening toward 1.0 (**v0.9.0 released** — Planning, Recovery & Co
 - PHX-005 architecture approved — hybrid authority model (ADR 0019). Human approval is mandatory for initial workstation builds and major/high-impact changes. Autonomous routine maintenance is a future, disabled-by-default capability restricted to an explicit, reviewed allowlist and policy grant.
 - Architecture and acceptance criteria merged to `develop` (PR #50) in `docs/adr/0019-plan-gated-transactional-execution.md` and `docs/specs/PHX-005-plan-gated-execution.md`.
 - PHX-005A accepted and merged (PR #51).
-- PHX-005B — Freshness gate: started on `feature/phx-005b-freshness-gate`. Scope: produce the machine identity and configuration, manifest and state fingerprints that the PHX-005A contracts require, then compare the approved plan against freshly recomputed state for the same scope, and reject stale or unknown-freshness plans before any mutation. Read-only; no execution.
+- PHX-005B — Freshness gate: implemented on `feature/phx-005b-freshness-gate`, pending review. New `modules/PlanFreshness` (read-only, no `module.json`): machine identity (Windows MachineGuid + computer name), configuration / manifest / state fingerprints, stable action IDs and manifest identities, `New-PhoenixContractPlan` (wraps the existing planner unchanged), and `Test-`/`Assert-PhoenixPlanFreshness`, which rebuild the plan for the same scope and reject on any machine, version, fingerprint or action-set difference, or when freshness cannot be evaluated. Design choices: all manifests fingerprinted (not just in scope); Phoenix version change = stale; source revision informational only. Smoke-tested read-only against the live workstation (11 actions, fresh after save/reload).
+- Also fixed in this branch (PHX-005A defect): `ConvertFrom-Json` turns ISO dates into `DateTime`, so a saved plan failed validation on reload. Added a strict `System.Text.Json` reader to PlanContracts (`Read-PhoenixDeploymentPlanContract`, `Read-PhoenixApprovalRecord`) that also rejects duplicate keys.
 
 ## Next Planned Task
 - Complete PHX-005B review and CI before starting PHX-005C (executor).
@@ -59,12 +60,12 @@ Production hardening toward 1.0 (**v0.9.0 released** — Planning, Recovery & Co
 
 ## Current Repository Metrics
 
-Counted 22/11/2026 from tracked files after the PHX-005A merge (`eba2fc0`).
+Counted 22/11/2026 from tracked files on `feature/phx-005b-freshness-gate` (PHX-005A merge `eba2fc0` plus PHX-005B).
 
-Modules: 14
-Tests: 237
-PowerShell Files: 43
-Markdown Documents: 58
+Modules: 15
+Tests: 273
+PowerShell Files: 46
+Markdown Documents: 59
 GitHub Workflows: 1
 CI Status: Passing
 Open Issues: 0
