@@ -24,16 +24,21 @@ Production hardening toward 1.0 (**v0.9.0 released** — Planning, Recovery & Co
 - PHX-004 Slice 3 — Planner consumes the State Engine: `New-PhoenixDeploymentPlan` now sources current-vs-desired state *and* scoping from `Get-PhoenixState`, dropping its duplicated manifest loading, scoping, and predicate calls (and four imports). Deployment and maintenance now share one implementation of "what is the current state?" Verified a **pure dedupe** — the rendered plan is byte-identical before/after on the live machine. `Outdated` still plans as `Skip` (an orchestrated run never upgrades — that's repair's job), and `Get-PhoenixState` gained `-SkipVersionCheck` so the planner avoids a minutes-long WinGet query it would not act on. The State Engine is now the single source of truth.
 - PHX-004 Slice 2 — Repair: `Invoke-PhoenixRepair` re-applies desired state for **only** the drifted items (never a profile redeploy), reusing the owning module for each fix (`Install-`/`Update-PhoenixApplication`, `Set-PhoenixSetting`) so every repair is idempotent and self-verifying. Settings before applications; preflight gates application repairs only (settings continue — a registry write is not an install); `-DryRun` previews; `-Transactional` reverses changed repairs on failure via the Recovery engine. A *version* repair is deliberately non-reversible (undoing an upgrade by uninstalling would destroy a legitimately-installed app). Phoenix now fixes, not just knows.
 - Desired State & Drift Management Engine (PHX-004, Slice 1): `modules/StateEngine` — the single source of truth for current-vs-desired state; Phoenix can now *maintain*, not just deploy. `Get-PhoenixState` builds the state model (apps `Missing`/`Outdated`/`Present`, settings `Modified`/`Applied`) by orchestrating existing predicates; `Compare-PhoenixState` returns the drift set; `Invoke-PhoenixAudit` reports drift + writes a JSON artifact under `audits/`. Read-only. Desired = manifests in scope; honest drift surface (presence, version, registry) — drivers/services deferred. Added read-only WinGet probe `Test-PhoenixApplicationOutdated` in Installer. ADR [0018](docs/adr/0018-desired-state-drift-management.md). Verified live: flagged a missing app + an elevation-gated setting as drift, no version false positives. Slice 2 (`Invoke-PhoenixRepair`) is next.
+- PHX-005A — Plan and Approval Contracts (PR [#51](https://github.com/WebDevSH-Consult/Project-Phoenix/pull/51), squash-merged to `develop` as `eba2fc0`, 22/11/2026): `modules/PlanContracts` — versioned plan and approval contracts (JSON schemas `plan-v1` / `approval-v1`), deterministic canonical JSON, SHA-256 plan digest, and a separate `.approval.json` record bound to the exact plan ID/digest, machine, scope, configuration and manifest fingerprints, Phoenix and schema versions, with a maximum 24-hour expiry. Approval needs an interactive ConsoleHost session with non-redirected input and an exact `APPROVE` confirmation, and records the Windows approver name and SID. Operator-invoked only (no `module.json`), so normal orchestration does not discover it. Contracts only — no execution, and no change to Bootstrap, DeploymentPlanner, Installer, WindowsConfig or Recovery. Review fixed a corrupted module file and a missing duplicate-ActionId check. CI now parses every PowerShell file, because PSScriptAnalyzer did not fail on parse errors. A digest is not a signature: a local administrator who can edit both files can defeat it (ADR 0019).
 - Automatic Transactional Rollback: `Bootstrap.ps1 -Transactional` makes a run all-or-nothing — runs normally, then if any module does not end `Healthy`, automatically reverses every confirmed change the run made (in reverse order, each verified) and reports committed / rolled-back / rolled-back-with-failures. New `Invoke-PhoenixRollbackFromResults` (in `modules/Recovery`) reverses from live run results; `Invoke-PhoenixRollback` now delegates to it, so the report-driven and in-run paths share one plan builder + `Undo-*` primitives and can't drift. Forward orchestration path untouched; opt-in; honest bounds (reversible surface only, best-effort + verified, not an OS snapshot). ADR [0017](docs/adr/0017-automatic-transactional-rollback.md). This closes the rollback-on-failure item ADR 0015 deferred.
 
 ## Current Task
 - PHX-005 architecture approved — hybrid authority model (ADR 0019). Human approval is mandatory for initial workstation builds and major/high-impact changes. Autonomous routine maintenance is a future, disabled-by-default capability restricted to an explicit, reviewed allowlist and policy grant.
-- Architecture and acceptance criteria recorded on `feature/phx-005-plan-gated-execution` in `docs/adr/0019-plan-gated-transactional-execution.md` and `docs/specs/PHX-005-plan-gated-execution.md`.
-- PHX-005A implementation is underway on `feature/phx-005a-plan-approval-contracts`. Added the isolated `modules/PlanContracts` contract layer and Pester coverage. It does not execute deployments or alter Bootstrap, DeploymentPlanner, Installer, WindowsConfig, or Recovery behaviour. Pending CI and code review.
+- Architecture and acceptance criteria merged to `develop` (PR #50) in `docs/adr/0019-plan-gated-transactional-execution.md` and `docs/specs/PHX-005-plan-gated-execution.md`.
+- PHX-005A accepted and merged (PR #51).
+- PHX-005B — Freshness gate: started on `feature/phx-005b-freshness-gate`. Scope: produce the machine identity and configuration, manifest and state fingerprints that the PHX-005A contracts require, then compare the approved plan against freshly recomputed state for the same scope, and reject stale or unknown-freshness plans before any mutation. Read-only; no execution.
 
 ## Next Planned Task
-- Complete PHX-005A review and CI. Resolve any failures before starting PHX-005B freshness validation.
-- Then deliver PHX-005B through PHX-005F in the sequence defined by the PHX-005 specification. Preserve the existing default and `-Transactional` paths and the current regression suite.
+- Complete PHX-005B review and CI before starting PHX-005C (executor).
+- Then deliver PHX-005C through PHX-005F in the sequence defined by the PHX-005 specification. Preserve the existing default and `-Transactional` paths and the current regression suite.
+- Known follow-up from PHX-005A review (non-blocking): write the approval file with `FileMode.CreateNew` to remove the exists-then-write window.
+- ADR number clash: `feature/streamdeck-remote` (PR #49) also uses ADR 0019 — renumber the Stream Deck ADR to 0020 before it merges.
+- Local test note: 4 Installer/Profile tests fail on a workstation with pending file operations (preflight reads the live machine); they pass on CI. PR #48 (hermetic tests) is the intended fix.
 - Also pending: decide EPIC numbering for a "Hardware Awareness" epic doc (EPIC-05 was informally used for the Application Deployment Platform; suggest EPIC-06)
 
 ## Repository Health
@@ -54,11 +59,13 @@ Production hardening toward 1.0 (**v0.9.0 released** — Planning, Recovery & Co
 
 ## Current Repository Metrics
 
-Modules: 13
-Tests: 218
-PowerShell Files: 40
-Markdown Documents: 55
+Counted 22/11/2026 from tracked files after the PHX-005A merge (`eba2fc0`).
+
+Modules: 14
+Tests: 237
+PowerShell Files: 43
+Markdown Documents: 58
 GitHub Workflows: 1
 CI Status: Passing
 Open Issues: 0
-Open PRs: 0
+Open PRs: 2 (#48 v1.0 polish, #49 Stream Deck remote)
