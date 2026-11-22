@@ -53,6 +53,70 @@ function ConvertTo-PhoenixCanonicalJson {
     return ConvertTo-Json -InputObject $canonical -Depth 100 -Compress
 }
 
+function ConvertFrom-PhoenixJsonElement {
+    [CmdletBinding()]
+    param([Parameter(Mandatory)][System.Text.Json.JsonElement]$Element)
+    switch ($Element.ValueKind) {
+        'Object' {
+            $properties = [ordered]@{}
+            foreach ($property in $Element.EnumerateObject()) {
+                if ($properties.Contains($property.Name)) { throw "Duplicate JSON property '$($property.Name)' is not allowed in a contract artefact." }
+                $properties[$property.Name] = ConvertFrom-PhoenixJsonElement -Element $property.Value
+            }
+            return [pscustomobject]$properties
+        }
+        'Array' {
+            $items = [System.Collections.Generic.List[object]]::new()
+            foreach ($item in $Element.EnumerateArray()) { $items.Add((ConvertFrom-PhoenixJsonElement -Element $item)) }
+            return ,$items.ToArray()
+        }
+        'String' { return $Element.GetString() }
+        'Number' {
+            $int64 = [int64]0
+            if ($Element.TryGetInt64([ref]$int64)) { return $int64 }
+            $decimal = [decimal]0
+            if ($Element.TryGetDecimal([ref]$decimal)) { return $decimal }
+            return $Element.GetDouble()
+        }
+        'True' { return $true }
+        'False' { return $false }
+        'Null' { return $null }
+        default { throw "Unsupported JSON value kind '$($Element.ValueKind)'." }
+    }
+}
+
+function ConvertFrom-PhoenixContractJson {
+    <#
+        .SYNOPSIS
+        Parses contract JSON exactly as written. Unlike ConvertFrom-Json, it never
+        converts ISO 8601 strings to DateTime (which would break the canonical
+        digest after a save/reload) and it rejects duplicate property names.
+    #>
+    [CmdletBinding()]
+    param([Parameter(Mandatory)][string]$Json)
+    $options = [System.Text.Json.JsonDocumentOptions]::new()
+    $options.MaxDepth = 100
+    $document = [System.Text.Json.JsonDocument]::Parse($Json, $options)
+    try { return ConvertFrom-PhoenixJsonElement -Element $document.RootElement }
+    finally { $document.Dispose() }
+}
+
+function Read-PhoenixDeploymentPlanContract {
+    [CmdletBinding()]
+    param([Parameter(Mandatory)][string]$Path)
+    if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) { throw "Plan file not found: $Path" }
+    $plan = ConvertFrom-PhoenixContractJson -Json ([IO.File]::ReadAllText([IO.Path]::GetFullPath($Path)))
+    Assert-PhoenixDeploymentPlanContract -Plan $plan | Out-Null
+    return $plan
+}
+
+function Read-PhoenixApprovalRecord {
+    [CmdletBinding()]
+    param([Parameter(Mandatory)][string]$Path)
+    if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) { throw "Approval file not found: $Path" }
+    return ConvertFrom-PhoenixContractJson -Json ([IO.File]::ReadAllText([IO.Path]::GetFullPath($Path)))
+}
+
 function Get-PhoenixDeploymentPlanDigest {
     [CmdletBinding()]
     [OutputType([string])]
@@ -370,4 +434,5 @@ function Test-PhoenixApprovalRecord {
 Export-ModuleMember -Function ConvertTo-PhoenixCanonicalJson, Get-PhoenixDeploymentPlanDigest,
     New-PhoenixDeploymentPlanContract, Assert-PhoenixDeploymentPlanContract,
     Test-PhoenixDeploymentPlanContract, New-PhoenixApprovalRecord,
-    Assert-PhoenixApprovalRecord, Test-PhoenixApprovalRecord
+    Assert-PhoenixApprovalRecord, Test-PhoenixApprovalRecord,
+    ConvertFrom-PhoenixContractJson, Read-PhoenixDeploymentPlanContract, Read-PhoenixApprovalRecord

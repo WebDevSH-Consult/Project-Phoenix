@@ -125,6 +125,50 @@ Describe 'Phoenix canonical JSON and plan digest' {
     }
 }
 
+Describe 'Phoenix contract JSON round-trip' {
+    It 'keeps a plan valid after saving to disk and reading back' {
+        $plan = New-TestPlan
+        $path = Join-Path $TestDrive 'roundtrip.plan.json'
+        [IO.File]::WriteAllText($path, (ConvertTo-PhoenixCanonicalJson -InputObject $plan))
+        $loaded = Read-PhoenixDeploymentPlanContract -Path $path
+        $loaded.CreatedAt | Should -BeOfType [string]
+        $loaded.CreatedAt | Should -Be $plan.CreatedAt
+        $loaded.PlanDigest | Should -Be $plan.PlanDigest
+        (Get-PhoenixDeploymentPlanDigest -Plan $loaded) | Should -Be $plan.PlanDigest
+    }
+    It 'keeps an approval valid after saving to disk and reading back' {
+        $plan = New-TestPlan
+        $approval = New-TestApproval -Plan $plan
+        $path = Join-Path $TestDrive 'roundtrip.approval.json'
+        [IO.File]::WriteAllText($path, (ConvertTo-PhoenixCanonicalJson -InputObject $approval))
+        $loaded = Read-PhoenixApprovalRecord -Path $path
+        $loaded.ApprovedAt | Should -BeOfType [string]
+        Assert-PhoenixApprovalRecord -Plan $plan -Approval $loaded -Now ([datetimeoffset]::Parse('2026-11-22T10:02:00Z')) | Should -BeTrue
+    }
+    It 'rejects a tampered plan file on read' {
+        $plan = New-TestPlan
+        $path = Join-Path $TestDrive 'tampered.plan.json'
+        $json = (ConvertTo-PhoenixCanonicalJson -InputObject $plan).Replace('Vendor.TestApp', 'Attacker.Other')
+        [IO.File]::WriteAllText($path, $json)
+        { Read-PhoenixDeploymentPlanContract -Path $path } | Should -Throw '*PlanDigest*'
+    }
+    It 'rejects duplicate JSON property names' {
+        { ConvertFrom-PhoenixContractJson -Json '{"Scope":"A","Scope":"B"}' } | Should -Throw '*Duplicate JSON property*'
+    }
+    It 'preserves integer, boolean, null and nested values' {
+        $value = ConvertFrom-PhoenixContractJson -Json '{"n":0,"big":9007199254740993,"f":1.5,"b":true,"z":null,"a":[1,{"k":"2026-11-22T10:00:00Z"}]}'
+        $value.n | Should -BeOfType [int64]
+        $value.big | Should -Be 9007199254740993
+        $value.f | Should -Be 1.5
+        $value.b | Should -BeTrue
+        $value.z | Should -BeNullOrEmpty
+        $value.a[1].k | Should -BeOfType [string]
+    }
+    It 'fails clearly for a missing file' {
+        { Read-PhoenixDeploymentPlanContract -Path (Join-Path $TestDrive 'missing.json') } | Should -Throw '*not found*'
+    }
+}
+
 Describe 'Phoenix approval record' {
     It 'accepts an approval bound to the exact plan and valid time window' {
         $plan = New-TestPlan
