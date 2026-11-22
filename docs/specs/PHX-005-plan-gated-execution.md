@@ -1,6 +1,6 @@
 # PHX-005 — Plan-Gated Transactional Execution
 
-**Status:** Architecture approved; implementation not started  
+**Status:** Architecture approved; PHX-005A contract implementation on feature branch, pending CI and review  
 **Architecture decision:** [ADR 0019](../adr/0019-plan-gated-transactional-execution.md)  
 **Target:** Phoenix v1.0 production hardening  
 **Base:** v0.9.0 on `develop`
