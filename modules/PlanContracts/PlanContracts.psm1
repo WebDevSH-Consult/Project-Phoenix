@@ -220,6 +220,13 @@ function Test-PhoenixInteractiveSession {
     return [bool]([Environment]::UserInteractive -and $Host.Name -eq 'ConsoleHost')
 }
 
+function Read-PhoenixApprovalConfirmation {
+    [CmdletBinding()]
+    [OutputType([string])]
+    param()
+    return Read-Host 'Type APPROVE to create the approval record'
+}
+
 function Get-PhoenixCurrentApproverIdentity {
     [CmdletBinding()]
     param()
@@ -261,7 +268,7 @@ function New-PhoenixApprovalRecord {
     Write-Host (ConvertTo-PhoenixCanonicalJson -InputObject @($Plan.Actions))
     Write-Host "SHA-256: $($Plan.PlanDigest)"
     Write-Host 'Approval applies only to this exact plan and context.'
-    $response = Read-Host 'Type APPROVE to create the approval record'
+    $response = Read-PhoenixApprovalConfirmation
     if ($response -cne 'APPROVE') { throw 'Approval denied. No approval record was created.' }
 
     $approver = Get-PhoenixCurrentApproverIdentity
