@@ -29,10 +29,10 @@ Production hardening toward 1.0 (**v0.9.0 released** — Planning, Recovery & Co
 ## Current Task
 - PHX-005 architecture approved — hybrid authority model (ADR 0019). Human approval is mandatory for initial workstation builds and major/high-impact changes. Autonomous routine maintenance is a future, disabled-by-default capability restricted to an explicit, reviewed allowlist and policy grant.
 - Architecture and acceptance criteria recorded on `feature/phx-005-plan-gated-execution` in `docs/adr/0019-plan-gated-transactional-execution.md` and `docs/specs/PHX-005-plan-gated-execution.md`.
-- Implementation has not started. No runtime code or existing deployment behaviour has been changed.
+- PHX-005A implementation is underway on `feature/phx-005a-plan-approval-contracts`. Added the isolated `modules/PlanContracts` contract layer and Pester coverage. It does not execute deployments or alter Bootstrap, DeploymentPlanner, Installer, WindowsConfig, or Recovery behaviour. Pending CI and code review.
 
 ## Next Planned Task
-- PHX-005A — Plan/approval contracts: define and test the versioned plan schema, deterministic canonicalisation, SHA-256 digest, explicit operator approval record, expiry, and machine/scope/configuration binding.
+- Complete PHX-005A review and CI. Resolve any failures before starting PHX-005B freshness validation.
 - Then deliver PHX-005B through PHX-005F in the sequence defined by the PHX-005 specification. Preserve the existing default and `-Transactional` paths and the current regression suite.
 - Also pending: decide EPIC numbering for a "Hardware Awareness" epic doc (EPIC-05 was informally used for the Application Deployment Platform; suggest EPIC-06)
 
