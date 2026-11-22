@@ -175,14 +175,14 @@ Describe 'Phoenix approval record' {
     It 'requires exact uppercase APPROVE confirmation' {
         $plan = New-TestPlan
         Mock -ModuleName PlanContracts Test-PhoenixInteractiveSession { $true }
-        Mock -ModuleName PlanContracts Read-Host { 'approve' }
+        Mock -ModuleName PlanContracts Read-PhoenixApprovalConfirmation { 'approve' }
         { New-PhoenixApprovalRecord -Plan $plan -ApprovalPath (Join-Path $TestDrive 'plan.approval.json') } | Should -Throw '*Approval denied*'
         Test-Path (Join-Path $TestDrive 'plan.approval.json') | Should -BeFalse
     }
     It 'writes a separate approval artefact after explicit confirmation' {
         $plan = New-TestPlan
         Mock -ModuleName PlanContracts Test-PhoenixInteractiveSession { $true }
-        Mock -ModuleName PlanContracts Read-Host { 'APPROVE' }
+        Mock -ModuleName PlanContracts Read-PhoenixApprovalConfirmation { 'APPROVE' }
         Mock -ModuleName PlanContracts Get-PhoenixCurrentApproverIdentity {
             [pscustomobject]@{ Name = 'PHOENIX-TEST\Operator'; Sid = 'S-1-5-21-1000' }
         }
