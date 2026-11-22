@@ -27,12 +27,13 @@ Production hardening toward 1.0 (**v0.9.0 released** — Planning, Recovery & Co
 - Automatic Transactional Rollback: `Bootstrap.ps1 -Transactional` makes a run all-or-nothing — runs normally, then if any module does not end `Healthy`, automatically reverses every confirmed change the run made (in reverse order, each verified) and reports committed / rolled-back / rolled-back-with-failures. New `Invoke-PhoenixRollbackFromResults` (in `modules/Recovery`) reverses from live run results; `Invoke-PhoenixRollback` now delegates to it, so the report-driven and in-run paths share one plan builder + `Undo-*` primitives and can't drift. Forward orchestration path untouched; opt-in; honest bounds (reversible surface only, best-effort + verified, not an OS snapshot). ADR [0017](docs/adr/0017-automatic-transactional-rollback.md). This closes the rollback-on-failure item ADR 0015 deferred.
 
 ## Current Task
-- None in progress — awaiting next task selection
+- PHX-005 architecture approved — hybrid authority model (ADR 0019). Human approval is mandatory for initial workstation builds and major/high-impact changes. Autonomous routine maintenance is a future, disabled-by-default capability restricted to an explicit, reviewed allowlist and policy grant.
+- Architecture and acceptance criteria recorded on `feature/phx-005-plan-gated-execution` in `docs/adr/0019-plan-gated-transactional-execution.md` and `docs/specs/PHX-005-plan-gated-execution.md`.
+- Implementation has not started. No runtime code or existing deployment behaviour has been changed.
 
 ## Next Planned Task
-- PHX-004 is complete (all three slices). Production-hardening toward v1.0:
-  1. Plan-gated transactional execution — combine the Deployment Planner (ADR 0016) with the transactional run (ADR 0017): execute the reviewed plan, not the profile, as one all-or-nothing transaction. Fail-fast (stop at first failure) is the related refinement.
-  2. Final v1.0 polish and the release
+- PHX-005A — Plan/approval contracts: define and test the versioned plan schema, deterministic canonicalisation, SHA-256 digest, explicit operator approval record, expiry, and machine/scope/configuration binding.
+- Then deliver PHX-005B through PHX-005F in the sequence defined by the PHX-005 specification. Preserve the existing default and `-Transactional` paths and the current regression suite.
 - Also pending: decide EPIC numbering for a "Hardware Awareness" epic doc (EPIC-05 was informally used for the Application Deployment Platform; suggest EPIC-06)
 
 ## Repository Health
