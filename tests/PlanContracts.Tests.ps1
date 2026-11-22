@@ -9,14 +9,14 @@ BeforeAll {
         }
     }
     function New-TestPlan {
-        $args = @{
+        $planArguments = @{
             Machine = @{ MachineId = 'machine-001'; ComputerName = 'PHOENIX-TEST' }
             Scope = 'Profile: Test'; PhoenixVersion = '0.9.0'; SourceRevision = 'abcdef123456'
             ConfigurationFingerprint = ('a' * 64); ManifestFingerprint = ('b' * 64); StateFingerprint = ('c' * 64)
             Actions = @((New-TestAction)); Summary = @{ Install = 1; Apply = 0; Skip = 0; Defer = 0; Risk = 'Low' }
             PlanId = '11111111-1111-4111-8111-111111111111'; CreatedAt = [datetimeoffset]::Parse('2026-11-22T10:00:00Z')
         }
-        New-PhoenixDeploymentPlanContract @args
+        New-PhoenixDeploymentPlanContract @planArguments
     }
     function New-TestApproval {
         param($Plan, [datetimeoffset]$At = [datetimeoffset]::Parse('2026-11-22T10:01:00Z'))
@@ -64,17 +64,15 @@ Describe 'Phoenix canonical JSON and plan digest' {
         }
         (Get-PhoenixDeploymentPlanDigest -Plan $reordered) | Should -Be $plan.PlanDigest
     }
-    It 'detects a changed execution parameter' {
+    It 'detects changed execution parameters and machine context' {
         $plan = New-TestPlan
         $plan.Actions[0].Parameters.PackageId = 'Attacker.OtherPackage'
         { Assert-PhoenixDeploymentPlanContract -Plan $plan } | Should -Throw '*PlanDigest*'
-    }
-    It 'detects changed machine context' {
         $plan = New-TestPlan
         $plan.Machine.MachineId = 'machine-002'
         { Assert-PhoenixDeploymentPlanContract -Plan $plan } | Should -Throw '*PlanDigest*'
     }
-    It 'rejects unsupported schema, missing manifest identity and duplicate action IDs' {
+    It 'rejects unsupported schema and missing manifest identity' {
         $plan = New-TestPlan
         $plan.SchemaVersion = '9.9'
         { Assert-PhoenixDeploymentPlanContract -Plan $plan } | Should -Throw '*Unsupported plan schema*'
@@ -82,14 +80,16 @@ Describe 'Phoenix canonical JSON and plan digest' {
         $plan.Actions[0].ManifestIdentity = ''
         $plan.PlanDigest = Get-PhoenixDeploymentPlanDigest -Plan $plan
         { Assert-PhoenixDeploymentPlanContract -Plan $plan } | Should -Throw '*manifest identity*'
+    }
+    It 'rejects duplicate action IDs' {
         $action = New-TestAction
-        $input = @{
+        $planArguments = @{
             Machine = @{ MachineId = 'machine-001'; ComputerName = 'PHOENIX-TEST' }
             Scope = 'Test'; PhoenixVersion = '0.9.0'; SourceRevision = ''
             ConfigurationFingerprint = ('a' * 64); ManifestFingerprint = ('b' * 64); StateFingerprint = ('c' * 64)
             Actions = @($action, $action); Summary = @{ Risk = 'Low' }
         }
-        { New-PhoenixDeploymentPlanContract @input } | Should -Throw '*Duplicate ActionId*'
+        { New-PhoenixDeploymentPlanContract @planArguments } | Should -Throw '*Duplicate ActionId*'
     }
     It 'rejects unknown actions and dependency references' {
         $plan = New-TestPlan
@@ -102,12 +102,12 @@ Describe 'Phoenix canonical JSON and plan digest' {
         { Assert-PhoenixDeploymentPlanContract -Plan $plan } | Should -Throw '*unknown dependency*'
     }
     It 'rejects malformed SHA-256 fingerprints' {
-        $input = @{
+        $planArguments = @{
             Machine = @{ MachineId = 'machine'; ComputerName = 'PC' }; Scope = 'Test'
             PhoenixVersion = '0.9.0'; SourceRevision = ''; ConfigurationFingerprint = 'bad'
             ManifestFingerprint = ('b' * 64); StateFingerprint = ('c' * 64); Actions = @(); Summary = @{}
         }
-        { New-PhoenixDeploymentPlanContract @input } | Should -Throw '*64-character hexadecimal*'
+        { New-PhoenixDeploymentPlanContract @planArguments } | Should -Throw '*64-character hexadecimal*'
     }
 }
 
