@@ -169,15 +169,15 @@ Describe 'Phoenix approval record' {
     It 'fails closed when the approval session is non-interactive' {
         $plan = New-TestPlan
         Mock -ModuleName PlanContracts Test-PhoenixInteractiveSession { $false }
-        { New-PhoenixApprovalRecord -Plan $plan -ApprovalPath (Join-Path $TestDrive 'approval.json') } | Should -Throw '*interactive Windows ConsoleHost*'
-        Test-Path (Join-Path $TestDrive 'approval.json') | Should -BeFalse
+        { New-PhoenixApprovalRecord -Plan $plan -ApprovalPath (Join-Path $TestDrive 'plan.approval.json') } | Should -Throw '*interactive Windows ConsoleHost*'
+        Test-Path (Join-Path $TestDrive 'plan.approval.json') | Should -BeFalse
     }
     It 'requires exact uppercase APPROVE confirmation' {
         $plan = New-TestPlan
         Mock -ModuleName PlanContracts Test-PhoenixInteractiveSession { $true }
         Mock -ModuleName PlanContracts Read-Host { 'approve' }
-        { New-PhoenixApprovalRecord -Plan $plan -ApprovalPath (Join-Path $TestDrive 'approval.json') } | Should -Throw '*Approval denied*'
-        Test-Path (Join-Path $TestDrive 'approval.json') | Should -BeFalse
+        { New-PhoenixApprovalRecord -Plan $plan -ApprovalPath (Join-Path $TestDrive 'plan.approval.json') } | Should -Throw '*Approval denied*'
+        Test-Path (Join-Path $TestDrive 'plan.approval.json') | Should -BeFalse
     }
     It 'writes a separate approval artefact after explicit confirmation' {
         $plan = New-TestPlan
@@ -186,7 +186,7 @@ Describe 'Phoenix approval record' {
         Mock -ModuleName PlanContracts Get-PhoenixCurrentApproverIdentity {
             [pscustomobject]@{ Name = 'PHOENIX-TEST\Operator'; Sid = 'S-1-5-21-1000' }
         }
-        $path = Join-Path $TestDrive 'approvals/plan.approval.json'
+        $path = Join-Path $TestDrive 'approvals/plan.plan.approval.json'
         $approval = New-PhoenixApprovalRecord -Plan $plan -ApprovalPath $path
         Test-Path $path | Should -BeTrue
         (Get-Content $path -Raw | ConvertFrom-Json).PlanDigest | Should -Be $plan.PlanDigest
