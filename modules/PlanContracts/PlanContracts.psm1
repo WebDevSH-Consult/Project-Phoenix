@@ -134,19 +134,34 @@ function Assert-PhoenixDeploymentPlanContract {
         }
     }
 
-    # A dependency cycle is invalid even when every referenced ID exists.
-    $visitState = @{}
-    $visitDependency = {
-        param([string]$ActionId)
-        if ($visitState[$ActionId] -eq 1) { throw "Dependency cycle detected at action '$ActionId'." }
-        if ($visitState[$ActionId] -eq 2) { return }
-        $visitState[$ActionId] = 1
-        foreach ($dependency in @($actionById[$ActionId].Dependencies)) {
-            & $visitDependency ([string]$dependency)
-        }
-        $visitState[$ActionId] = 2
+    # Kahn's topological check rejects dependency cycles without recursion.
+    $inDegree = @{}
+    $dependents = @{}
+    foreach ($action in @($Plan.Actions)) {
+        $actionId = [string]$action.ActionId
+        $inDegree[$actionId] = @($action.Dependencies).Count
+        $dependents[$actionId] = [System.Collections.Generic.List[string]]::new()
     }
-    foreach ($actionId in $actionById.Keys) { & $visitDependency ([string]$actionId) }
+    foreach ($action in @($Plan.Actions)) {
+        $actionId = [string]$action.ActionId
+        foreach ($dependency in @($action.Dependencies)) {
+            $dependents[[string]$dependency].Add($actionId)
+        }
+    }
+    $ready = [System.Collections.Generic.Queue[string]]::new()
+    foreach ($actionId in $inDegree.Keys) {
+        if ($inDegree[$actionId] -eq 0) { $ready.Enqueue([string]$actionId) }
+    }
+    $visitedCount = 0
+    while ($ready.Count -gt 0) {
+        $currentId = $ready.Dequeue()
+        $visitedCount++
+        foreach ($dependentId in $dependents[$currentId]) {
+            $inDegree[$dependentId]--
+            if ($inDegree[$dependentId] -eq 0) { $ready.Enqueue($dependentId) }
+        }
+    }
+    if ($visitedCount -ne $inDegree.Count) { throw 'Dependency cycle detected in the plan action graph.' }
 
     $actualDigest = Get-PhoenixDeploymentPlanDigest -Plan $Plan
     if ([string]$Plan.PlanDigest -cne $actualDigest) { throw 'PlanDigest does not match the canonical plan content.' }
