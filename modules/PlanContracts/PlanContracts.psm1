@@ -224,7 +224,19 @@ function New-PhoenixApprovalRecord {
         [ValidateRange(1, 24)][int]$ValidityHours = 4
     )
     Assert-PhoenixDeploymentPlanContract -Plan $Plan | Out-Null
-    if ([IO.Path]::GetFileName($ApprovalPath) -notmatch '\.approval\.json
+    if ([IO.Path]::GetFileName($ApprovalPath) -notmatch '\.approval\.json$') {
+        throw 'ApprovalPath must be a separate file ending in .approval.json.'
+    }
+    $fullApprovalPath = [IO.Path]::GetFullPath($ApprovalPath)
+    if (Test-Path -LiteralPath $fullApprovalPath) {
+        throw 'Refusing to overwrite an existing approval record. Choose a new approval path.'
+    }
+    if (-not (Test-PhoenixInteractiveSession)) {
+        throw 'Approval denied: an interactive Windows ConsoleHost session is required.'
+    }
+
+    Write-Host ''
+    Write-Host 'PHOENIX DEPLOYMENT PLAN APPROVAL' -ForegroundColor Cyan
     Write-Host "Plan ID: $($Plan.PlanId)"
     Write-Host "Machine: $($Plan.Machine.ComputerName) [$($Plan.Machine.MachineId)]"
     Write-Host "Scope: $($Plan.Scope)"
@@ -236,6 +248,7 @@ function New-PhoenixApprovalRecord {
     Write-Host 'Approval applies only to this exact plan and context.'
     $response = Read-Host 'Type APPROVE to create the approval record'
     if ($response -cne 'APPROVE') { throw 'Approval denied. No approval record was created.' }
+
     $approver = Get-PhoenixCurrentApproverIdentity
     $approvedAt = [datetimeoffset]::UtcNow
     $approval = [pscustomobject][ordered]@{
@@ -256,8 +269,11 @@ function New-PhoenixApprovalRecord {
         PlanSchemaVersion = [string]$Plan.SchemaVersion
     }
     Assert-PhoenixApprovalRecord -Plan $Plan -Approval $approval | Out-Null
+
     $parent = Split-Path -Parent $fullApprovalPath
-    if (-not [string]::IsNullOrWhiteSpace($parent)) { New-Item -ItemType Directory -Path $parent -Force | Out-Null }
+    if (-not [string]::IsNullOrWhiteSpace($parent)) {
+        New-Item -ItemType Directory -Path $parent -Force | Out-Null
+    }
     $json = ConvertTo-PhoenixCanonicalJson -InputObject $approval
     [IO.File]::WriteAllText($fullApprovalPath, $json, [Text.UTF8Encoding]::new($false))
     return $approval
