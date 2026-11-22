@@ -101,6 +101,20 @@ Describe 'Phoenix canonical JSON and plan digest' {
         $plan.PlanDigest = Get-PhoenixDeploymentPlanDigest -Plan $plan
         { Assert-PhoenixDeploymentPlanContract -Plan $plan } | Should -Throw '*unknown dependency*'
     }
+    It 'rejects dependency cycles' {
+        $first = New-TestAction
+        $second = New-TestAction
+        $second.ActionId = 'action-002'
+        $first.Dependencies = @('action-002')
+        $second.Dependencies = @('action-001')
+        $planArguments = @{
+            Machine = @{ MachineId = 'machine-001'; ComputerName = 'PHOENIX-TEST' }
+            Scope = 'Test'; PhoenixVersion = '0.9.0'; SourceRevision = ''
+            ConfigurationFingerprint = ('a' * 64); ManifestFingerprint = ('b' * 64); StateFingerprint = ('c' * 64)
+            Actions = @($first, $second); Summary = @{ Risk = 'Low' }
+        }
+        { New-PhoenixDeploymentPlanContract @planArguments } | Should -Throw '*Dependency cycle*'
+    }
     It 'rejects malformed SHA-256 fingerprints' {
         $planArguments = @{
             Machine = @{ MachineId = 'machine'; ComputerName = 'PC' }; Scope = 'Test'
