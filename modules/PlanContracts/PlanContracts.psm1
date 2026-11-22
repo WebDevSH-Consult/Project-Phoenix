@@ -108,7 +108,224 @@ function Assert-PhoenixDeploymentPlanContract {
         foreach ($field in @('ActionId', 'Category', 'Name', 'ManifestIdentity', 'Action', 'Parameters', 'Reason', 'Risk', 'Order', 'Dependencies')) {
             if ($action.PSObject.Properties.Name -cnotcontains $field) { throw "Action is missing required field '$field'." }
         }
-        if ([string]::IsNullOrWhiteSpace([string]$action.ActionId)) { throw 'ActionId cannot be empty.' }
+        if ([string]$action.ActionId -notmatch '^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}
+        if ($action.Category -notin @('Application', 'Setting')) { throw "Unsupported action category '$($action.Category)'." }
+        if ($action.Action -notin @('Install', 'Apply', 'Skip', 'Defer')) { throw "Unsupported action '$($action.Action)'." }
+        if ($action.Action -eq 'Install' -and $action.Category -ne 'Application') { throw 'Install is only valid for Application actions.' }
+        if ($action.Action -eq 'Apply' -and $action.Category -ne 'Setting') { throw 'Apply is only valid for Setting actions.' }
+        if ([string]::IsNullOrWhiteSpace([string]$action.Name)) { throw 'Action Name cannot be empty.' }
+        if ([string]::IsNullOrWhiteSpace([string]$action.ManifestIdentity)) { throw "Action '$($action.ActionId)' is missing its manifest identity." }
+        if ($action.Parameters -isnot [System.Collections.IDictionary] -and $action.Parameters -isnot [pscustomobject]) { throw "Action '$($action.ActionId)' Parameters must be an object." }
+        if ([string]::IsNullOrWhiteSpace([string]$action.Reason)) { throw "Action '$($action.ActionId)' Reason cannot be empty." }
+        if ($action.Risk -notin @('Low', 'Medium', 'High', 'Critical')) { throw "Action '$($action.ActionId)' has an unsupported Risk value." }
+        if (($action.Order -isnot [int16]) -and ($action.Order -isnot [int32]) -and ($action.Order -isnot [int64]) -and
+            ($action.Order -isnot [uint16]) -and ($action.Order -isnot [uint32]) -and ($action.Order -isnot [uint64])) {
+            throw "Action '$($action.ActionId)' Order must be a non-negative integer."
+        }
+        if ([decimal]$action.Order -lt 0) { throw "Action '$($action.ActionId)' Order must be a non-negative integer." }
+        if ($action.Dependencies -isnot [System.Collections.IEnumerable] -or $action.Dependencies -is [string]) { throw "Action '$($action.ActionId)' Dependencies must be an array." }
+    }
+    $actionById = @{}
+    foreach ($action in @($Plan.Actions)) { $actionById[[string]$action.ActionId] = $action }
+    foreach ($action in @($Plan.Actions)) {
+        foreach ($dependency in @($action.Dependencies)) {
+            if ([string]$dependency -eq [string]$action.ActionId) { throw "Action '$($action.ActionId)' cannot depend on itself." }
+            if (-not $ids.Contains([string]$dependency)) { throw "Action '$($action.ActionId)' references unknown dependency '$dependency'." }
+        }
+    }
+
+    # A dependency cycle is invalid even when every referenced ID exists.
+    $visitState = @{}
+    $visitDependency = {
+        param([string]$ActionId)
+        if ($visitState[$ActionId] -eq 1) { throw "Dependency cycle detected at action '$ActionId'." }
+        if ($visitState[$ActionId] -eq 2) { return }
+        $visitState[$ActionId] = 1
+        foreach ($dependency in @($actionById[$ActionId].Dependencies)) {
+            & $visitDependency ([string]$dependency)
+        }
+        $visitState[$ActionId] = 2
+    }
+    foreach ($actionId in $actionById.Keys) { & $visitDependency ([string]$actionId) }
+
+    $actualDigest = Get-PhoenixDeploymentPlanDigest -Plan $Plan
+    if ([string]$Plan.PlanDigest -cne $actualDigest) { throw 'PlanDigest does not match the canonical plan content.' }
+    return $true
+}
+
+function Test-PhoenixDeploymentPlanContract {
+    [CmdletBinding()]
+    [OutputType([bool])]
+    param([Parameter(Mandatory)][psobject]$Plan)
+    try { return [bool](Assert-PhoenixDeploymentPlanContract -Plan $Plan) }
+    catch { return $false }
+}
+
+function New-PhoenixDeploymentPlanContract {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][psobject]$Machine,
+        [Parameter(Mandatory)][string]$Scope,
+        [Parameter(Mandatory)][string]$PhoenixVersion,
+        [Parameter(Mandatory)][AllowEmptyString()][string]$SourceRevision,
+        [Parameter(Mandatory)][string]$ConfigurationFingerprint,
+        [Parameter(Mandatory)][string]$ManifestFingerprint,
+        [Parameter(Mandatory)][string]$StateFingerprint,
+        [Parameter(Mandatory)][AllowEmptyCollection()][object[]]$Actions,
+        [Parameter(Mandatory)][psobject]$Summary,
+        [string]$PlanId = ([guid]::NewGuid().ToString('D')),
+        [datetimeoffset]$CreatedAt = [datetimeoffset]::UtcNow
+    )
+    $plan = [ordered]@{
+        SchemaVersion = $script:PlanSchemaVersion
+        PlanId = $PlanId
+        CreatedAt = $CreatedAt.ToUniversalTime().ToString('o')
+        PhoenixVersion = $PhoenixVersion
+        SourceRevision = $SourceRevision
+        Machine = $Machine
+        Scope = $Scope
+        ConfigurationFingerprint = $ConfigurationFingerprint.ToLowerInvariant()
+        ManifestFingerprint = $ManifestFingerprint.ToLowerInvariant()
+        StateFingerprint = $StateFingerprint.ToLowerInvariant()
+        Actions = @($Actions)
+        Summary = $Summary
+        DigestAlgorithm = $script:DigestAlgorithm
+        PlanDigest = ''
+    }
+    $result = [pscustomobject]$plan
+    $result.PlanDigest = Get-PhoenixDeploymentPlanDigest -Plan $result
+    Assert-PhoenixDeploymentPlanContract -Plan $result | Out-Null
+    return $result
+}
+
+function Test-PhoenixInteractiveSession {
+    [CmdletBinding()]
+    [OutputType([bool])]
+    param()
+    return [bool]([Environment]::UserInteractive -and $Host.Name -eq 'ConsoleHost')
+}
+
+function Get-PhoenixCurrentApproverIdentity {
+    [CmdletBinding()]
+    param()
+    if (-not $IsWindows) { throw 'Human plan approval is supported only from a Windows security context.' }
+    $identity = [Security.Principal.WindowsIdentity]::GetCurrent()
+    if ($null -eq $identity -or [string]::IsNullOrWhiteSpace($identity.Name) -or $null -eq $identity.User) {
+        throw 'Could not resolve the current Windows approver identity.'
+    }
+    return [pscustomobject]@{ Name = $identity.Name; Sid = $identity.User.Value }
+}
+
+function New-PhoenixApprovalRecord {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][psobject]$Plan,
+        [Parameter(Mandatory)][string]$ApprovalPath,
+        [ValidateRange(1, 24)][int]$ValidityHours = 4
+    )
+    Assert-PhoenixDeploymentPlanContract -Plan $Plan | Out-Null
+    if (-not (Test-PhoenixInteractiveSession)) { throw 'Approval denied: an interactive Windows ConsoleHost session is required.' }
+    Write-Host ''
+    Write-Host 'PHOENIX DEPLOYMENT PLAN APPROVAL' -ForegroundColor Cyan
+    Write-Host "Plan ID: $($Plan.PlanId)"
+    Write-Host "Machine: $($Plan.Machine.ComputerName) [$($Plan.Machine.MachineId)]"
+    Write-Host "Scope: $($Plan.Scope)"
+    Write-Host "Risk: $($Plan.Summary.Risk)"
+    Write-Host "Actions: $(@($Plan.Actions).Count)"
+    Write-Host "SHA-256: $($Plan.PlanDigest)"
+    Write-Host 'Approval applies only to this exact plan and context.'
+    $response = Read-Host 'Type APPROVE to create the approval record'
+    if ($response -cne 'APPROVE') { throw 'Approval denied. No approval record was created.' }
+    $approver = Get-PhoenixCurrentApproverIdentity
+    $approvedAt = [datetimeoffset]::UtcNow
+    $approval = [pscustomobject][ordered]@{
+        SchemaVersion = $script:ApprovalSchemaVersion
+        ApprovalId = [guid]::NewGuid().ToString('D')
+        PlanId = [string]$Plan.PlanId
+        PlanDigest = [string]$Plan.PlanDigest
+        Decision = 'Approved'
+        Approver = $approver
+        ApprovedAt = $approvedAt.ToString('o')
+        ExpiresAt = $approvedAt.AddHours($ValidityHours).ToString('o')
+        MachineId = [string]$Plan.Machine.MachineId
+        ComputerName = [string]$Plan.Machine.ComputerName
+        Scope = [string]$Plan.Scope
+        ConfigurationFingerprint = [string]$Plan.ConfigurationFingerprint
+        ManifestFingerprint = [string]$Plan.ManifestFingerprint
+        PhoenixVersion = [string]$Plan.PhoenixVersion
+        PlanSchemaVersion = [string]$Plan.SchemaVersion
+    }
+    Assert-PhoenixApprovalRecord -Plan $Plan -Approval $approval | Out-Null
+    $parent = Split-Path -Parent $ApprovalPath
+    if (-not [string]::IsNullOrWhiteSpace($parent)) { New-Item -ItemType Directory -Path $parent -Force | Out-Null }
+    $json = ConvertTo-PhoenixCanonicalJson -InputObject $approval
+    [IO.File]::WriteAllText([IO.Path]::GetFullPath($ApprovalPath), $json, [Text.UTF8Encoding]::new($false))
+    return $approval
+}
+
+function Assert-PhoenixApprovalRecord {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][psobject]$Plan,
+        [Parameter(Mandatory)][psobject]$Approval,
+        [datetimeoffset]$Now = [datetimeoffset]::UtcNow
+    )
+    Assert-PhoenixDeploymentPlanContract -Plan $Plan | Out-Null
+    $required = @('SchemaVersion', 'ApprovalId', 'PlanId', 'PlanDigest', 'Decision', 'Approver',
+        'ApprovedAt', 'ExpiresAt', 'MachineId', 'ComputerName', 'Scope',
+        'ConfigurationFingerprint', 'ManifestFingerprint', 'PhoenixVersion', 'PlanSchemaVersion')
+    foreach ($name in $required) {
+        if ($Approval.PSObject.Properties.Name -cnotcontains $name) { throw "Approval is missing required field '$name'." }
+    }
+    if ($Approval.SchemaVersion -cne $script:ApprovalSchemaVersion) { throw "Unsupported approval schema version '$($Approval.SchemaVersion)'." }
+    if ($Approval.Decision -cne 'Approved') { throw 'Approval decision is not Approved.' }
+    $approvalGuid = [guid]::Empty
+    if (-not [guid]::TryParse([string]$Approval.ApprovalId, [ref]$approvalGuid) -or $approvalGuid -eq [guid]::Empty) { throw 'ApprovalId must be a non-empty GUID.' }
+    if ([string]$Approval.PlanId -cne [string]$Plan.PlanId) { throw 'Approval PlanId does not match the plan.' }
+    if ([string]$Approval.PlanDigest -cne [string]$Plan.PlanDigest) { throw 'Approval PlanDigest does not match the plan.' }
+    if ([string]::IsNullOrWhiteSpace([string]$Approval.Approver.Name) -or [string]::IsNullOrWhiteSpace([string]$Approval.Approver.Sid)) {
+        throw 'Approval must identify the Windows approver by name and SID.'
+    }
+    $pairs = @(
+        @{ Field = 'MachineId'; Expected = [string]$Plan.Machine.MachineId },
+        @{ Field = 'ComputerName'; Expected = [string]$Plan.Machine.ComputerName },
+        @{ Field = 'Scope'; Expected = [string]$Plan.Scope },
+        @{ Field = 'ConfigurationFingerprint'; Expected = [string]$Plan.ConfigurationFingerprint },
+        @{ Field = 'ManifestFingerprint'; Expected = [string]$Plan.ManifestFingerprint },
+        @{ Field = 'PhoenixVersion'; Expected = [string]$Plan.PhoenixVersion },
+        @{ Field = 'PlanSchemaVersion'; Expected = [string]$Plan.SchemaVersion }
+    )
+    foreach ($pair in $pairs) {
+        if ([string]$Approval.($pair.Field) -cne $pair.Expected) { throw "Approval $($pair.Field) does not match the plan." }
+    }
+    $approvedAt = [datetimeoffset]::MinValue
+    $expiresAt = [datetimeoffset]::MinValue
+    if (-not [datetimeoffset]::TryParse([string]$Approval.ApprovedAt, [ref]$approvedAt)) { throw 'ApprovedAt is invalid.' }
+    if (-not [datetimeoffset]::TryParse([string]$Approval.ExpiresAt, [ref]$expiresAt)) { throw 'ExpiresAt is invalid.' }
+    if ($approvedAt -gt $Now.AddMinutes(5)) { throw 'Approval timestamp is in the future.' }
+    if ($expiresAt -le $approvedAt) { throw 'Approval expiry must be later than the approval timestamp.' }
+    if ($Now -ge $expiresAt) { throw 'Approval has expired.' }
+    if ($expiresAt -gt $approvedAt.AddHours(24)) { throw 'Approval validity cannot exceed 24 hours.' }
+    return $true
+}
+
+function Test-PhoenixApprovalRecord {
+    [CmdletBinding()]
+    [OutputType([bool])]
+    param(
+        [Parameter(Mandatory)][psobject]$Plan,
+        [Parameter(Mandatory)][psobject]$Approval,
+        [datetimeoffset]$Now = [datetimeoffset]::UtcNow
+    )
+    try { return [bool](Assert-PhoenixApprovalRecord -Plan $Plan -Approval $Approval -Now $Now) }
+    catch { return $false }
+}
+
+Export-ModuleMember -Function ConvertTo-PhoenixCanonicalJson, Get-PhoenixDeploymentPlanDigest,
+    New-PhoenixDeploymentPlanContract, Assert-PhoenixDeploymentPlanContract,
+    Test-PhoenixDeploymentPlanContract, New-PhoenixApprovalRecord,
+    Assert-PhoenixApprovalRecord, Test-PhoenixApprovalRecord
+) { throw 'ActionId must be a stable 1–128 character identifier.' }
         if (-not $ids.Add([string]$action.ActionId)) { throw "Duplicate ActionId '$($action.ActionId)'." }
         if ($action.Category -notin @('Application', 'Setting')) { throw "Unsupported action category '$($action.Category)'." }
         if ($action.Action -notin @('Install', 'Apply', 'Skip', 'Defer')) { throw "Unsupported action '$($action.Action)'." }
