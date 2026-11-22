@@ -7,6 +7,7 @@ PHX-005A adds the PlanContracts module as an operator-invoked contract layer. It
 - Deployment plan: SchemaVersion = 1.0
 - Approval record: SchemaVersion = 1.0
 - Digest: SHA256
+- Machine-readable JSON Schemas: `schemas/plan-v1.schema.json` and `schemas/approval-v1.schema.json`
 
 The plan binds a GUID, UTC creation time, Phoenix version/source revision, machine ID and computer name, scope, configuration/manifest/state SHA-256 fingerprints, ordered actions, summary and digest.
 
