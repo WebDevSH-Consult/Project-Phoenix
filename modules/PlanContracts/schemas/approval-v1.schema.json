@@ -1,0 +1,97 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://project-phoenix.local/schemas/approval-v1.schema.json",
+  "title": "Project Phoenix Approval Record Contract v1.0",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "SchemaVersion",
+    "ApprovalId",
+    "PlanId",
+    "PlanDigest",
+    "Decision",
+    "Approver",
+    "ApprovedAt",
+    "ExpiresAt",
+    "MachineId",
+    "ComputerName",
+    "Scope",
+    "ConfigurationFingerprint",
+    "ManifestFingerprint",
+    "PhoenixVersion",
+    "PlanSchemaVersion"
+  ],
+  "properties": {
+    "SchemaVersion": {
+      "const": "1.0"
+    },
+    "ApprovalId": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "PlanId": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "PlanDigest": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "Decision": {
+      "const": "Approved"
+    },
+    "Approver": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "Name",
+        "Sid"
+      ],
+      "properties": {
+        "Name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "Sid": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "ApprovedAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "ExpiresAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "MachineId": {
+      "type": "string",
+      "minLength": 1
+    },
+    "ComputerName": {
+      "type": "string",
+      "minLength": 1
+    },
+    "Scope": {
+      "type": "string",
+      "minLength": 1
+    },
+    "ConfigurationFingerprint": {
+      "type": "string",
+      "pattern": "^[a-fA-F0-9]{64}$"
+    },
+    "ManifestFingerprint": {
+      "type": "string",
+      "pattern": "^[a-fA-F0-9]{64}$"
+    },
+    "PhoenixVersion": {
+      "type": "string",
+      "minLength": 1
+    },
+    "PlanSchemaVersion": {
+      "const": "1.0"
+    }
+  }
+}
